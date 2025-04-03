@@ -25,6 +25,7 @@ class SettingsViewController: UIViewController {
     private var showDate = true
     private var useMinimalistStyle = true
     private var useMonochromeIcons = false
+    private var showMotivationalMessages = true
     
     // Apps settings
     private var allApps: [AppItem] = []
@@ -87,6 +88,7 @@ class SettingsViewController: UIViewController {
         defaults.set(showDate, forKey: "showDate")
         defaults.set(useMinimalistStyle, forKey: "useMinimalistStyle")
         defaults.set(useMonochromeIcons, forKey: "useMonochromeIcons")
+        defaults.set(showMotivationalMessages, forKey: "showMotivationalMessages")
     }
     
     private func loadSettings() {
@@ -97,6 +99,7 @@ class SettingsViewController: UIViewController {
         showDate = defaults.bool(forKey: "showDate")
         useMinimalistStyle = defaults.bool(forKey: "useMinimalistStyle")
         useMonochromeIcons = defaults.bool(forKey: "useMonochromeIcons")
+        showMotivationalMessages = defaults.bool(forKey: "showMotivationalMessages")
     }
     
     private func loadApps() {
@@ -118,7 +121,7 @@ class SettingsViewController: UIViewController {
 extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     
     func numberOfSections(in tableView: UITableView) -> Int {
-        return 4
+        return 5
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -130,6 +133,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         case 2:
             return 1 // Icon settings
         case 3:
+            return 1 // Wellness settings
+        case 4:
             return allApps.count // App selection
         default:
             return 0
@@ -145,6 +150,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         case 2:
             return "App Icons"
         case 3:
+            return "Wellness"
+        case 4:
             return "Home Screen Apps"
         default:
             return nil
@@ -152,7 +159,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     }
     
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
-        if section == 3 {
+        if section == 4 {
             // Create a header with a button to toggle edit mode
             let headerView = UIView(frame: CGRect(x: 0, y: 0, width: tableView.frame.width, height: 40))
             
@@ -183,14 +190,18 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     }
     
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        return section == 3 ? 44 : UITableView.automaticDimension
+        return section == 4 ? 44 : UITableView.automaticDimension
     }
     
     func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        if section == 3 {
+        switch section {
+        case 3:
+            return "Motivational messages will appear on your home screen to encourage digital wellbeing."
+        case 4:
             return "Toggle which apps appear on your home screen."
+        default:
+            return nil
         }
-        return nil
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -236,7 +247,17 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             default:
                 break
             }
-        case 3: // App selection
+        case 3: // Wellness settings
+            switch indexPath.row {
+            case 0:
+                cell.textLabel?.text = "Show Motivational Messages"
+                switchView.isOn = showMotivationalMessages
+                switchView.tag = 4
+                switchView.addTarget(self, action: #selector(switchChanged(_:)), for: .valueChanged)
+            default:
+                break
+            }
+        case 4: // App selection
             if indexPath.row < allApps.count {
                 let app = allApps[indexPath.row]
                 cell.textLabel?.text = app.name
@@ -288,6 +309,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             useMinimalistStyle = sender.isOn
         case 3:
             useMonochromeIcons = sender.isOn
+        case 4:
+            showMotivationalMessages = sender.isOn
         default:
             break
         }
@@ -382,12 +405,12 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     
     func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
         // Only allow editing in the apps section
-        return indexPath.section == 3
+        return indexPath.section == 4
     }
     
     func tableView(_ tableView: UITableView, editingStyleForRowAt indexPath: IndexPath) -> UITableViewCell.EditingStyle {
         // During reordering mode, don't show delete buttons
-        if indexPath.section == 3 && tableView.isEditing {
+        if indexPath.section == 4 && tableView.isEditing {
             return .none
         }
         return .delete
@@ -395,12 +418,12 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     
     func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
         // Only allow moving in the apps section
-        return indexPath.section == 3
+        return indexPath.section == 4
     }
     
     func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
         // Ensure we're only moving within the apps section
-        guard sourceIndexPath.section == 3 && destinationIndexPath.section == 3 else { return }
+        guard sourceIndexPath.section == 4 && destinationIndexPath.section == 4 else { return }
         
         // Update the app order in our data model
         let movedApp = allApps.remove(at: sourceIndexPath.row)
@@ -414,7 +437,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     }
     
     func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if indexPath.section == 3 && editingStyle == .delete {
+        if indexPath.section == 4 && editingStyle == .delete {
             // Prevent deleting all apps - maintain at least one app
             if allApps.count <= 1 {
                 let alert = UIAlertController(

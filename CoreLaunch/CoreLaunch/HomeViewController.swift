@@ -18,6 +18,7 @@ class HomeViewController: UIViewController, SettingsDelegate {
     private var displayedApps: [AppItem] = []
     private let dateLabel = UILabel()
     private let timeLabel = UILabel()
+    private let motivationalLabel = UILabel() // New label for motivational messages
     private let settingsButton = UIButton(type: .system)
     private let usageStatsButton = UIButton(type: .system)
     private let focusModeButton = UIButton(type: .system)
@@ -30,6 +31,7 @@ class HomeViewController: UIViewController, SettingsDelegate {
     private var showDate = true
     private var useMinimalistStyle = true
     private var useMonochromeIcons = false
+    private var showMotivationalMessages: Bool = true
     
     // MARK: - Lifecycle
     override func viewDidLoad() {
@@ -83,6 +85,16 @@ class HomeViewController: UIViewController, SettingsDelegate {
         dateLabel.isHidden = !showDate
         view.addSubview(dateLabel)
         
+        // Motivational message display
+        motivationalLabel.font = UIFont.systemFont(ofSize: 14, weight: .regular)
+        motivationalLabel.textAlignment = .center
+        motivationalLabel.textColor = .secondaryLabel
+        motivationalLabel.numberOfLines = 0
+        motivationalLabel.isHidden = !showMotivationalMessages
+        motivationalLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(motivationalLabel)
+        displayRandomMotivationalMessage()
+        
         // Settings button
         settingsButton.setImage(UIImage(systemName: "gear"), for: .normal)
         settingsButton.addTarget(self, action: #selector(settingsButtonTapped), for: .touchUpInside)
@@ -124,6 +136,11 @@ class HomeViewController: UIViewController, SettingsDelegate {
             dateLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             dateLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             
+            motivationalLabel.topAnchor.constraint(equalTo: dateLabel.bottomAnchor, constant: 12),
+            motivationalLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            motivationalLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 40),
+            motivationalLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -40),
+            
             settingsButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
             settingsButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             settingsButton.widthAnchor.constraint(equalToConstant: 44),
@@ -139,7 +156,7 @@ class HomeViewController: UIViewController, SettingsDelegate {
             focusModeButton.widthAnchor.constraint(equalToConstant: 44),
             focusModeButton.heightAnchor.constraint(equalToConstant: 44),
             
-            tableView.topAnchor.constraint(equalTo: dateLabel.bottomAnchor, constant: 40),
+            tableView.topAnchor.constraint(equalTo: motivationalLabel.bottomAnchor, constant: 20),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
@@ -166,6 +183,7 @@ class HomeViewController: UIViewController, SettingsDelegate {
             // More minimal style
             timeLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 48, weight: .light)
             dateLabel.font = UIFont.systemFont(ofSize: 16, weight: .regular)
+            motivationalLabel.font = UIFont.systemFont(ofSize: 14, weight: .light) 
         } else {
             view.backgroundColor = isDarkMode ? .systemBackground : .systemBackground
             tableView.separatorStyle = .singleLine
@@ -173,10 +191,12 @@ class HomeViewController: UIViewController, SettingsDelegate {
             // Less minimal style
             timeLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 36, weight: .regular)
             dateLabel.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+            motivationalLabel.font = UIFont.systemFont(ofSize: 14, weight: .regular)
         }
         
         // Update visibility based on settings
         dateLabel.isHidden = !showDate
+        motivationalLabel.isHidden = !showMotivationalMessages
     }
     
     // MARK: - Data
@@ -249,6 +269,11 @@ class HomeViewController: UIViewController, SettingsDelegate {
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.updateTimeAndDate()
         }
+        
+        // Update motivational message periodically (every 2 hours)
+        Timer.scheduledTimer(withTimeInterval: 7200, repeats: true) { [weak self] _ in
+            self?.displayRandomMotivationalMessage()
+        }
     }
     
     private func updateTimeAndDate() {
@@ -274,6 +299,7 @@ class HomeViewController: UIViewController, SettingsDelegate {
             defaults.set(true, forKey: "showDate")
             defaults.set(true, forKey: "useMinimalistStyle")
             defaults.set(false, forKey: "useMonochromeIcons")
+            defaults.set(true, forKey: "showMotivationalMessages")
             defaults.set(true, forKey: "defaultsInitialized")
         }
         
@@ -282,6 +308,7 @@ class HomeViewController: UIViewController, SettingsDelegate {
         showDate = defaults.bool(forKey: "showDate")
         useMinimalistStyle = defaults.bool(forKey: "useMinimalistStyle")
         useMonochromeIcons = defaults.bool(forKey: "useMonochromeIcons")
+        showMotivationalMessages = defaults.bool(forKey: "showMotivationalMessages")
     }
     
     @objc private func settingsButtonTapped() {
@@ -401,6 +428,7 @@ class HomeViewController: UIViewController, SettingsDelegate {
         loadSettings()
         updateAppearance()
         updateTimeAndDate()
+        displayRandomMotivationalMessage() // Refresh motivational message
         loadApps() // Reload apps to reflect any changes in selection
     }
     
@@ -440,6 +468,43 @@ class HomeViewController: UIViewController, SettingsDelegate {
         alert.addAction(cancelAction)
         
         present(alert, animated: true)
+    }
+}
+
+// MARK: - Motivational Messages
+extension HomeViewController {
+    private func getMotivationalMessages() -> [String] {
+        return [
+            "Take a moment to disconnect digitally and reconnect with yourself.",
+            "Balance is key: technology should enhance your life, not consume it.",
+            "Small breaks from your device lead to big moments of clarity.",
+            "Your attention is valuable. Spend it mindfully.",
+            "Technology works best when it serves your well-being, not the other way around.",
+            "Digital minimalism creates space for mental flourishing.",
+            "Presence over pixels: be here now.",
+            "The most important connections happen offline.",
+            "Nurturing your digital well-being is an act of self-care.",
+            "Your screen time is a reflection of your priorities.",
+            "Quality engagement matters more than quantity of notifications.",
+            "Mindful tech use leads to more meaningful moments.",
+            "Use technology intentionally, not habitually.",
+            "Your focus determines your reality.",
+            "Make technology work for you, not against you.",
+            "Each notification-free moment is a gift to your attention.",
+            "Digital choices today shape your well-being tomorrow.",
+            "True productivity comes from focused attention, not constant connection.",
+            "Regular digital breaks refresh your mind and spirit.",
+            "The best innovations enhance our humanity, not replace it."
+        ]
+    }
+    
+    private func displayRandomMotivationalMessage() {
+        if showMotivationalMessages {
+            let messages = getMotivationalMessages()
+            motivationalLabel.text = messages[Int.random(in: 0..<messages.count)]
+        } else {
+            motivationalLabel.text = ""
+        }
     }
 }
 
