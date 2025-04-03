@@ -32,6 +32,11 @@ class HomeViewController: UIViewController, SettingsDelegate {
     private var useMinimalistStyle = true
     private var useMonochromeIcons = false
     private var showMotivationalMessages: Bool = true
+    private var textSizeMultiplier: Float = 1.0
+    private var fontName: String = "System"
+    
+    // Theme
+    private var currentTheme: ColorTheme = ThemeManager.shared.currentTheme
     
     // MARK: - Lifecycle
     override func viewDidLoad() {
@@ -50,20 +55,43 @@ class HomeViewController: UIViewController, SettingsDelegate {
             name: NSNotification.Name("ApplicationDidBecomeActiveNotification"),
             object: nil
         )
+        
+        // Register for theme change notifications
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(themeDidChange),
+            name: NSNotification.Name("ThemeDidChangeNotification"),
+            object: nil
+        )
+        
+        // No need for appearance change notifications here
+        // We already handle trait changes in traitCollectionDidChange method
     }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         print("HomeViewController viewWillAppear - checking for sessions")
+        
+        // Explicitly apply theme background
+        view.backgroundColor = ThemeManager.shared.currentTheme.backgroundColor
+        
+        // If it's Light theme, force white background
+        if ThemeManager.shared.currentTheme.name == "Light" {
+            view.backgroundColor = .white
+        }
+        
         // Update UI if needed
         updateAppearance()
+        
         // Always check for pending sessions when returning to the app
         checkForPendingAppSessions()
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        updateAppearance()
+        
+        // Call our user interface style change handler when the trait collection changes
+        userInterfaceStyleDidChange()
     }
     
     // MARK: - UI Setup
@@ -170,28 +198,108 @@ class HomeViewController: UIViewController, SettingsDelegate {
         tableView.separatorStyle = .none
         tableView.backgroundColor = .clear
         tableView.showsVerticalScrollIndicator = false
+        
+        // Ensure table view background matches theme
+        if ThemeManager.shared.currentTheme.name == "Light" {
+            tableView.backgroundColor = .white
+        } else {
+            tableView.backgroundColor = ThemeManager.shared.currentTheme.backgroundColor
+        }
     }
     
     private func updateAppearance() {
-        // Update UI based on dark/light mode and minimalist settings
+        // Update UI based on dark/light mode, minimalist settings, and theme
         let isDarkMode = traitCollection.userInterfaceStyle == .dark
         
+        // Determine base sizes adjusted by multiplier
+        let timeFontSize = CGFloat(useMinimalistStyle ? 48 : 36) * CGFloat(textSizeMultiplier)
+        let dateFontSize = CGFloat(useMinimalistStyle ? 16 : 14) * CGFloat(textSizeMultiplier)
+        let motivationalFontSize = CGFloat(14) * CGFloat(textSizeMultiplier)
+        
+        // Apply theme colors directly without any dark mode overrides
+        view.backgroundColor = currentTheme.backgroundColor
+        
+        // Debug print
+        print("HomeVC updateAppearance - Current theme: \(currentTheme.name), timeLabel color: \(timeLabel.textColor.debugDescription)")
+        
+        // Force time label to be visible regardless of theme
+        timeLabel.isHidden = false
+        
+        // Special case for Light theme - force white background
+        if currentTheme.name == "Light" {
+            view.backgroundColor = .white
+            tableView.backgroundColor = .white
+            print("Light theme detected - forcing white background")
+        } else if currentTheme.name == "Monochrome" {
+            view.backgroundColor = .white
+            tableView.backgroundColor = .white
+            timeLabel.textColor = .black // Force time label to be black
+            dateLabel.textColor = .darkGray
+            motivationalLabel.textColor = .darkGray
+            print("Monochrome theme detected - applying explicit settings")
+        }
+        
+        // Force white text in dark themes
+        if currentTheme.name == "Dark" || currentTheme.name == "Midnight" || 
+           (currentTheme.name == "Auto Light and Dark" && traitCollection.userInterfaceStyle == .dark) {
+            timeLabel.textColor = .white
+            dateLabel.textColor = .lightGray
+            motivationalLabel.textColor = .lightGray
+        } else if currentTheme.name == "Monochrome" {
+            // Explicitly set text colors for monochrome theme
+            timeLabel.textColor = .black
+            dateLabel.textColor = .darkGray
+            motivationalLabel.textColor = .darkGray
+        } else {
+            timeLabel.textColor = currentTheme.textColor
+            dateLabel.textColor = currentTheme.secondaryTextColor
+            motivationalLabel.textColor = currentTheme.secondaryTextColor
+        }
+        
+        // Apply button colors
+        if currentTheme.name == "Dark" || currentTheme.name == "Midnight" || 
+           (currentTheme.name == "Auto Light and Dark" && traitCollection.userInterfaceStyle == .dark) {
+            settingsButton.tintColor = .white
+            usageStatsButton.tintColor = .white
+            focusModeButton.tintColor = .white
+        } else if currentTheme.name == "Monochrome" {
+            // Monochrome-specific button colors
+            settingsButton.tintColor = .black
+            usageStatsButton.tintColor = .darkGray
+            focusModeButton.tintColor = .gray
+        } else {
+            settingsButton.tintColor = currentTheme.accentColor
+            usageStatsButton.tintColor = currentTheme.primaryColor
+            focusModeButton.tintColor = currentTheme.secondaryColor
+        }
+        
+        // Apply font settings
         if useMinimalistStyle {
-            view.backgroundColor = isDarkMode ? .black : .white
             tableView.separatorStyle = .none
             
-            // More minimal style
-            timeLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 48, weight: .light)
-            dateLabel.font = UIFont.systemFont(ofSize: 16, weight: .regular)
-            motivationalLabel.font = UIFont.systemFont(ofSize: 14, weight: .light) 
+            // Set fonts based on user preference
+            if fontName == "System" {
+                timeLabel.font = UIFont.monospacedDigitSystemFont(ofSize: timeFontSize, weight: .light)
+                dateLabel.font = UIFont.systemFont(ofSize: dateFontSize, weight: .regular)
+                motivationalLabel.font = UIFont.systemFont(ofSize: motivationalFontSize, weight: .light)
+            } else {
+                timeLabel.font = UIFont(name: fontName, size: timeFontSize) ?? UIFont.monospacedDigitSystemFont(ofSize: timeFontSize, weight: .light)
+                dateLabel.font = UIFont(name: fontName, size: dateFontSize) ?? UIFont.systemFont(ofSize: dateFontSize, weight: .regular)
+                motivationalLabel.font = UIFont(name: fontName, size: motivationalFontSize) ?? UIFont.systemFont(ofSize: motivationalFontSize, weight: .light)
+            }
         } else {
-            view.backgroundColor = isDarkMode ? .systemBackground : .systemBackground
             tableView.separatorStyle = .singleLine
             
-            // Less minimal style
-            timeLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 36, weight: .regular)
-            dateLabel.font = UIFont.systemFont(ofSize: 14, weight: .medium)
-            motivationalLabel.font = UIFont.systemFont(ofSize: 14, weight: .regular)
+            // Set fonts based on user preference
+            if fontName == "System" {
+                timeLabel.font = UIFont.monospacedDigitSystemFont(ofSize: timeFontSize, weight: .regular)
+                dateLabel.font = UIFont.systemFont(ofSize: dateFontSize, weight: .medium)
+                motivationalLabel.font = UIFont.systemFont(ofSize: motivationalFontSize, weight: .regular)
+            } else {
+                timeLabel.font = UIFont(name: fontName, size: timeFontSize) ?? UIFont.monospacedDigitSystemFont(ofSize: timeFontSize, weight: .regular)
+                dateLabel.font = UIFont(name: fontName, size: dateFontSize) ?? UIFont.systemFont(ofSize: dateFontSize, weight: .medium)
+                motivationalLabel.font = UIFont(name: fontName, size: motivationalFontSize) ?? UIFont.systemFont(ofSize: motivationalFontSize, weight: .regular)
+            }
         }
         
         // Update visibility based on settings
@@ -300,7 +408,14 @@ class HomeViewController: UIViewController, SettingsDelegate {
             defaults.set(true, forKey: "useMinimalistStyle")
             defaults.set(false, forKey: "useMonochromeIcons")
             defaults.set(true, forKey: "showMotivationalMessages")
+            defaults.set(1.0, forKey: "textSizeMultiplier")
+            defaults.set("System", forKey: "fontName")
             defaults.set(true, forKey: "defaultsInitialized")
+            
+            // For new installs, set the theme based on system appearance
+            let isDarkMode = traitCollection.userInterfaceStyle == .dark
+            defaults.set(try? JSONEncoder().encode(isDarkMode ? ColorTheme.darkTheme : ColorTheme.defaultTheme), 
+                        forKey: "selectedTheme")
         }
         
         // Load saved settings
@@ -309,6 +424,17 @@ class HomeViewController: UIViewController, SettingsDelegate {
         useMinimalistStyle = defaults.bool(forKey: "useMinimalistStyle")
         useMonochromeIcons = defaults.bool(forKey: "useMonochromeIcons")
         showMotivationalMessages = defaults.bool(forKey: "showMotivationalMessages")
+        
+        // Load text settings
+        textSizeMultiplier = defaults.float(forKey: "textSizeMultiplier")
+        if textSizeMultiplier == 0 { textSizeMultiplier = 1.0 } // Handle default case
+        
+        if let savedFontName = defaults.string(forKey: "fontName") {
+            fontName = savedFontName
+        }
+        
+        // Load theme
+        currentTheme = ThemeManager.shared.currentTheme
     }
     
     @objc private func settingsButtonTapped() {
@@ -335,6 +461,56 @@ class HomeViewController: UIViewController, SettingsDelegate {
     @objc private func applicationDidBecomeActive() {
         print("Application did become active notification received")
         checkForPendingAppSessions()
+    }
+    
+    @objc private func userInterfaceStyleDidChange() {
+        print("Interface style changed: \(traitCollection.userInterfaceStyle == .dark ? "dark" : "light")")
+        
+        // Reload theme if using Auto Light and Dark
+        if currentTheme.name == "Auto Light and Dark" {
+            // Re-fetch the theme to get updated colors based on new appearance
+            currentTheme = ThemeManager.shared.currentTheme
+        }
+        
+        // Update UI
+        updateAppearance()
+        tableView.reloadData()
+    }
+    
+    @objc private func themeDidChange() {
+        print("Theme changed notification received")
+        
+        // Refresh current theme
+        currentTheme = ThemeManager.shared.currentTheme
+        
+        // Force time label to be visible with black text for Monochrome theme
+        if currentTheme.name == "Monochrome" {
+            timeLabel.isHidden = false
+            timeLabel.textColor = .black
+            dateLabel.textColor = .darkGray
+            motivationalLabel.textColor = .darkGray
+            print("Explicitly setting time label visibility and color for Monochrome theme")
+        }
+        
+        // Special handling for Light theme
+        if currentTheme.name == "Light" {
+            view.backgroundColor = .white
+            tableView.backgroundColor = .white
+            print("Light theme applied - forcing white background")
+            
+            // Force white background on all visible cells
+            for case let cell as AppCell in tableView.visibleCells {
+                cell.backgroundColor = .white
+                cell.contentView.backgroundColor = .white
+            }
+        } else {
+            view.backgroundColor = currentTheme.backgroundColor
+            tableView.backgroundColor = currentTheme.backgroundColor
+        }
+        
+        // Update UI
+        updateAppearance()
+        tableView.reloadData()
     }
     
     // MARK: - App Launch Tracking
@@ -432,6 +608,12 @@ class HomeViewController: UIViewController, SettingsDelegate {
         loadApps() // Reload apps to reflect any changes in selection
     }
     
+    func didUpdateTheme() {
+        currentTheme = ThemeManager.shared.currentTheme
+        updateAppearance()
+        tableView.reloadData()
+    }
+    
     func didUpdateAppSelections(_ updatedApps: [AppItem]) {
         allApps = updatedApps
         saveAppsToUserDefaults()
@@ -521,6 +703,13 @@ extension HomeViewController: UITableViewDataSource, UITableViewDelegate {
         
         let app = displayedApps[indexPath.row]
         cell.configure(with: app)
+        
+        // Ensure proper background for Light theme
+        if ThemeManager.shared.currentTheme.name == "Light" {
+            cell.backgroundColor = .white
+            cell.contentView.backgroundColor = .white
+        }
+        
         return cell
     }
     
@@ -547,6 +736,7 @@ class AppCell: UITableViewCell {
     
     private let nameLabel = UILabel()
     private let colorIndicator = UIView()
+    private var useMonochromeIcons = false
     
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -565,6 +755,16 @@ class AppCell: UITableViewCell {
         colorIndicator.translatesAutoresizingMaskIntoConstraints = false
         colorIndicator.layer.cornerRadius = 6
         contentView.addSubview(colorIndicator)
+        
+        // Set background color based on theme
+        let theme = ThemeManager.shared.currentTheme
+        if theme.name == "Light" {
+            contentView.backgroundColor = .white
+            backgroundColor = .white
+        } else {
+            contentView.backgroundColor = theme.backgroundColor
+            backgroundColor = theme.backgroundColor
+        }
         
         // App name label
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -587,21 +787,75 @@ class AppCell: UITableViewCell {
     func configure(with app: AppItem) {
         nameLabel.text = app.name
         
+        // Debug print
+        print("AppCell configure - App: \(app.name), current theme: \(ThemeManager.shared.currentTheme.name)")
+        
         // Check UserDefaults for settings
         let useMinimalistStyle = UserDefaults.standard.bool(forKey: "useMinimalistStyle")
-        let useMonochromeIcons = UserDefaults.standard.bool(forKey: "useMonochromeIcons")
+        self.useMonochromeIcons = UserDefaults.standard.bool(forKey: "useMonochromeIcons")
         let isDarkMode = traitCollection.userInterfaceStyle == .dark
+        let textSizeMultiplier = UserDefaults.standard.float(forKey: "textSizeMultiplier")
+        let fontSizeMultiplier = textSizeMultiplier > 0 ? textSizeMultiplier : 1.0
+        let fontName = UserDefaults.standard.string(forKey: "fontName") ?? "System"
+        
+        // Calculate font size with multiplier
+        let fontSize = CGFloat(17) * CGFloat(fontSizeMultiplier)
         
         // Apply icon color based on settings
-        colorIndicator.backgroundColor = app.getIconColor(useMonochrome: useMonochromeIcons, isDarkMode: isDarkMode)
+        if useMonochromeIcons {
+            colorIndicator.backgroundColor = isDarkMode ? .white : .black
+        } else {
+            // Use the app's color
+            colorIndicator.backgroundColor = app.color
+        }
+        
+        // Get the current theme and explicitly apply colors
+        let theme = ThemeManager.shared.currentTheme
+        
+        // Force white background for Light and Monochrome themes
+        if theme.name == "Light" || theme.name == "Monochrome" {
+            contentView.backgroundColor = .white
+            backgroundColor = .white
+            // Explicitly set text color for Monochrome theme
+            if theme.name == "Monochrome" {
+                nameLabel.textColor = .black
+            }
+        } else {
+            contentView.backgroundColor = theme.backgroundColor
+            backgroundColor = theme.backgroundColor
+        }
+        
+        // Force white text in dark themes
+        if theme.name == "Dark" || theme.name == "Midnight" || 
+           (theme.name == "Auto Light and Dark" && traitCollection.userInterfaceStyle == .dark) {
+            nameLabel.textColor = .white
+        } else if theme.name == "Monochrome" {
+            nameLabel.textColor = .black
+        } else {
+            nameLabel.textColor = theme.textColor
+        }
         
         // Apply style based on settings
         if useMinimalistStyle {
-            nameLabel.font = UIFont.systemFont(ofSize: 17, weight: .light)
+            if fontName == "System" {
+                nameLabel.font = UIFont.systemFont(ofSize: fontSize, weight: .light)
+            } else {
+                nameLabel.font = UIFont(name: fontName, size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .light)
+            }
             selectionStyle = .none
         } else {
-            nameLabel.font = UIFont.systemFont(ofSize: 17, weight: .regular)
+            if fontName == "System" {
+                nameLabel.font = UIFont.systemFont(ofSize: fontSize, weight: .regular)
+            } else {
+                nameLabel.font = UIFont(name: fontName, size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .regular)
+            }
             selectionStyle = .default
+        }
+        
+        // Final check for Monochrome theme - ensure text is black
+        if theme.name == "Monochrome" {
+            nameLabel.textColor = .black
+            print("AppCell: Force black text for Monochrome theme for app: \(app.name)")
         }
     }
     
@@ -613,7 +867,31 @@ class AppCell: UITableViewCell {
             configure(with: app)
         }
         
-        // Always update text color based on dark/light mode
-        nameLabel.textColor = .label
+        // Update colors based on current theme
+        let theme = ThemeManager.shared.currentTheme
+        
+        // Force white background for Light theme
+        if theme.name == "Light" {
+            contentView.backgroundColor = .white
+            backgroundColor = .white
+            print("AppCell: Light theme applied in trait change")
+        } else {
+            contentView.backgroundColor = theme.backgroundColor
+            backgroundColor = theme.backgroundColor
+        }
+        
+        // Force white text in dark themes
+        if theme.name == "Dark" || theme.name == "Midnight" || 
+           (theme.name == "Auto Light and Dark" && traitCollection.userInterfaceStyle == .dark) {
+            nameLabel.textColor = .white
+        } else if theme.name == "Monochrome" {
+            nameLabel.textColor = .black
+            // Special handling for monochrome icon colors
+            if !useMonochromeIcons {
+                colorIndicator.backgroundColor = .darkGray
+            }
+        } else {
+            nameLabel.textColor = theme.textColor
+        }
     }
 }
