@@ -20,6 +20,10 @@ class HomeViewController: UIViewController, SettingsDelegate {
     private let timeLabel = UILabel()
     private let settingsButton = UIButton(type: .system)
     private let usageStatsButton = UIButton(type: .system)
+    private let focusModeButton = UIButton(type: .system)
+    
+    // Focus mode
+    private let focusManager = FocusModeManager.shared
     
     // Settings
     private var use24HourTime = false
@@ -91,6 +95,12 @@ class HomeViewController: UIViewController, SettingsDelegate {
         usageStatsButton.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(usageStatsButton)
         
+        // Focus mode button
+        focusModeButton.setImage(UIImage(systemName: "timer"), for: .normal)
+        focusModeButton.addTarget(self, action: #selector(focusModeButtonTapped), for: .touchUpInside)
+        focusModeButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(focusModeButton)
+        
         // Table view for apps
         tableView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tableView)
@@ -123,6 +133,11 @@ class HomeViewController: UIViewController, SettingsDelegate {
             usageStatsButton.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -12),
             usageStatsButton.widthAnchor.constraint(equalToConstant: 44),
             usageStatsButton.heightAnchor.constraint(equalToConstant: 44),
+            
+            focusModeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            focusModeButton.trailingAnchor.constraint(equalTo: usageStatsButton.leadingAnchor, constant: -12),
+            focusModeButton.widthAnchor.constraint(equalToConstant: 44),
+            focusModeButton.heightAnchor.constraint(equalToConstant: 44),
             
             tableView.topAnchor.constraint(equalTo: dateLabel.bottomAnchor, constant: 40),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -282,6 +297,12 @@ class HomeViewController: UIViewController, SettingsDelegate {
         present(navController, animated: true)
     }
     
+    @objc private func focusModeButtonTapped() {
+        let focusModeVC = FocusModeViewController()
+        let navController = UINavigationController(rootViewController: focusModeVC)
+        present(navController, animated: true)
+    }
+    
     // MARK: - App Lifecycle
     
     @objc private func applicationDidBecomeActive() {
@@ -292,6 +313,12 @@ class HomeViewController: UIViewController, SettingsDelegate {
     // MARK: - App Launch Tracking
     
     private func showAppLaunchConfirmation(for app: AppItem) {
+        // Check if this app is blocked by focus mode
+        if focusManager.isAppBlocked(app.name) {
+            showFocusModeBlockAlert(for: app)
+            return
+        }
+        
         let alert = UIAlertController(
             title: "Launch \(app.name)",
             message: "Would you like to open \(app.name)? CoreLaunch will track your usage time.",
@@ -386,6 +413,33 @@ class HomeViewController: UIViewController, SettingsDelegate {
         UIView.transition(with: tableView, duration: 0.3, options: .transitionCrossDissolve, animations: {
             self.tableView.reloadData()
         }, completion: nil)
+    }
+    
+    // MARK: - Focus Mode
+    
+    private func showFocusModeBlockAlert(for app: AppItem) {
+        guard let activeSession = focusManager.activeFocusSession else { return }
+        
+        let alert = UIAlertController(
+            title: "App Blocked by Focus Mode",
+            message: "\(app.name) is currently blocked by Focus Mode. Your focus session will end in \(activeSession.formattedRemainingTime).",
+            preferredStyle: .alert
+        )
+        
+        let endFocusAction = UIAlertAction(title: "End Focus Session", style: .destructive) { [weak self] _ in
+            // End the focus session
+            self?.focusManager.endFocusSession(completed: false)
+            
+            // Now show the regular app launch confirmation
+            self?.showAppLaunchConfirmation(for: app)
+        }
+        
+        let cancelAction = UIAlertAction(title: "Stay Focused", style: .cancel)
+        
+        alert.addAction(endFocusAction)
+        alert.addAction(cancelAction)
+        
+        present(alert, animated: true)
     }
 }
 

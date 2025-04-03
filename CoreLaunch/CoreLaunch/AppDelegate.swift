@@ -7,11 +7,10 @@
 
 import UIKit
 import NotificationCenter
+import UserNotifications
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-
-
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Set up default settings if they don't exist
@@ -27,6 +26,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         
         // Initialize usage tracker
         _ = UsageTracker.shared
+        
+        // Initialize focus mode manager
+        _ = FocusModeManager.shared
         
         // Register for app lifecycle notifications to track usage
         NotificationCenter.default.addObserver(
@@ -64,6 +66,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         
         // Check if we need to show usage limit notifications
         checkUsageLimits()
+        
+        // Check if any app is being launched during focus mode
+        checkFocusModeRestrictions()
     }
     
     // MARK: - Usage Alerts
@@ -77,6 +82,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 print("Notification permission error: \(error.localizedDescription)")
             }
         }
+        
+        // Register notification categories for focus mode
+        registerFocusModeNotificationCategory()
     }
     
     private func checkUsageLimits() {
@@ -109,6 +117,69 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             }
         }
     }
+    
+    // MARK: - Focus Mode
+    
+    private func registerFocusModeNotificationCategory() {
+        // Create actions
+        let endAction = UNNotificationAction(identifier: "END_FOCUS", title: "End Focus Session", options: .destructive)
+        let continueAction = UNNotificationAction(identifier: "CONTINUE_FOCUS", title: "Stay Focused", options: .foreground)
+        
+        // Create category
+        let category = UNNotificationCategory(
+            identifier: "FOCUS_MODE_ALERT",
+            actions: [continueAction, endAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        
+        // Register category
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
+    
+    private func checkFocusModeRestrictions() {
+        // Get currently active app if possible
+        guard let currentApp = getCurrentAppName() else { return }
+        
+        // Check if app is blocked by focus mode
+        if FocusModeManager.shared.isAppBlocked(currentApp) {
+            showFocusModeBlockedAlert(appName: currentApp)
+        }
+    }
+    
+    private func getCurrentAppName() -> String? {
+        // In a real implementation, this would get the name of the app being launched
+        // For our prototype, we'll return the name from a UserDefaults key set by the launcher
+        return UserDefaults.standard.string(forKey: "lastLaunchedApp")
+    }
+    
+    private func showFocusModeBlockedAlert(appName: String) {
+        // In a full implementation, this would show the alert before the app fully launches
+        // For our prototype, we'll show a notification
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Focus Mode Active"
+        content.body = "\(appName) is blocked during your focus session."
+        content.sound = .default
+        content.categoryIdentifier = "FOCUS_MODE_ALERT"
+        
+        // Create a notification trigger
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        
+        // Create a request with the trigger and content
+        let request = UNNotificationRequest(
+            identifier: "focusModeBlocked",
+            content: content,
+            trigger: trigger
+        )
+        
+        // Add the request to the notification center
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Notification error: \(error.localizedDescription)")
+            }
+        }
+    }
 
     // MARK: UISceneSession Lifecycle
 
@@ -123,7 +194,4 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // If any sessions were discarded while the application was not running, this will be called shortly after application:didFinishLaunchingWithOptions.
         // Use this method to release any resources that were specific to the discarded scenes, as they will not return.
     }
-
-
 }
-
