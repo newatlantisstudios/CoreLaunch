@@ -19,6 +19,12 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is needed to scan theme QR codes</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is needed to save and import theme QR codes</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Permission is needed to save theme QR codes to your photo library</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 </dict>

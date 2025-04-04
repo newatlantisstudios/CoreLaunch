@@ -1,5 +1,3 @@
-        // Add method to reload table data
-//
 //  SettingsViewController.swift
 //  CoreLaunch
 //
@@ -8,12 +6,18 @@
 
 import UIKit
 
-// No need to import CoreLaunch as we're already in the module
-
 protocol SettingsDelegate: AnyObject {
     func didUpdateSettings()
     func didUpdateAppSelections(_ updatedApps: [AppItem])
     func didUpdateTheme()
+}
+
+// MARK: - ThemeScannerDelegate Protocol Extension
+extension SettingsViewController {
+    func didScanTheme(_ theme: ColorTheme) {
+        // Implementation to handle scanned themes
+        didImportTheme(theme)
+    }
 }
 
 class SettingsViewController: UIViewController {
@@ -57,6 +61,7 @@ class SettingsViewController: UIViewController {
         let themeVC = ThemeSelectionViewController()
         themeVC.delegate = self
         themeVC.selectedTheme = currentTheme
+        themeVC.theme = currentTheme // Initialize theme property
         let navController = UINavigationController(rootViewController: themeVC)
         present(navController, animated: true)
     }
@@ -65,6 +70,7 @@ class SettingsViewController: UIViewController {
         let customThemesVC = CustomThemesViewController()
         customThemesVC.delegate = self
         let navController = UINavigationController(rootViewController: customThemesVC)
+        navController.modalPresentationStyle = .fullScreen
         present(navController, animated: true)
     }
     
@@ -75,12 +81,30 @@ class SettingsViewController: UIViewController {
         present(navController, animated: true)
     }
     
+    // MARK: - Theme Share Delegate Method
+    func didImportTheme(_ theme: ColorTheme) {
+        // Register the imported theme
+        ThemeManager.shared.registerCustomTheme(theme)
+        
+        // Show confirmation
+        let alert = UIAlertController(
+            title: "Theme Imported",
+            message: "Successfully imported theme: \(theme.name)",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+    
     // MARK: - Theme Selection View Controller
-    class ThemeSelectionViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+    class ThemeSelectionViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, ThemeShareDelegate, ThemeScannerDelegate {
         private let tableView = UITableView()
+        private let newThemeCell = "NewThemeCell"
+        private let themeCell = "ThemePreviewCell"
         weak var delegate: SettingsViewController?
         var selectedTheme: ColorTheme!
         private var allThemes: [ColorTheme] = []
+        var theme: ColorTheme! // Make theme accessible
         
         override func viewDidLoad() {
             super.viewDidLoad()
@@ -91,11 +115,17 @@ class SettingsViewController: UIViewController {
             title = "Select Theme"
             navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(cancelButtonTapped))
             
+            // Add scan QR code button
+            let scanButton = UIBarButtonItem(image: UIImage(systemName: "qrcode.viewfinder"), style: .plain, target: self, action: #selector(scanQRButtonTapped))
+            navigationItem.rightBarButtonItem = scanButton
+            
             // Setup table view
             view.backgroundColor = .systemBackground
             tableView.dataSource = self
             tableView.delegate = self
-            tableView.register(ThemePreviewCell.self, forCellReuseIdentifier: "ThemePreviewCell")
+            tableView.register(UITableViewCell.self, forCellReuseIdentifier: newThemeCell)
+            tableView.register(ThemePreviewCell.self, forCellReuseIdentifier: themeCell)
+            tableView.allowsSelection = true
             view.addSubview(tableView)
             
             // Layout
@@ -112,6 +142,85 @@ class SettingsViewController: UIViewController {
             dismiss(animated: true)
         }
         
+        @objc private func scanQRButtonTapped() {
+            let scanVC = ThemeScannerViewController()
+            scanVC.delegate = self
+            present(scanVC, animated: true)
+        }
+        
+        @objc private func shareButtonTapped() {
+            let shareVC = ThemeShareViewController()
+            shareVC.theme = selectedTheme // Use selectedTheme instead of theme
+            shareVC.delegate = self
+            
+            let navController = UINavigationController(rootViewController: shareVC)
+            navController.modalPresentationStyle = .fullScreen
+            present(navController, animated: true)
+        }
+        
+        @objc private func shareThemeButtonTapped(_ sender: UIButton) {
+            let index = sender.tag
+            guard index < allThemes.count else { return }
+            
+            let theme = allThemes[index]
+            let shareVC = ThemeShareViewController()
+            shareVC.theme = theme
+            shareVC.delegate = self
+            
+            let navController = UINavigationController(rootViewController: shareVC)
+            navController.modalPresentationStyle = .fullScreen
+            present(navController, animated: true)
+        }
+        
+        @objc private func shareDefaultTheme() {
+            // Create a default theme template with the colors shown in the UI
+            let defaultTheme = ColorTheme(
+                name: "New Theme",
+                primaryColor: .systemBlue,
+                secondaryColor: .systemGreen,
+                accentColor: .systemOrange,
+                backgroundColor: .black,
+                textColor: .white,
+                secondaryTextColor: .lightGray
+            )
+            
+            // Create and present share view controller
+            let shareVC = ThemeShareViewController()
+            shareVC.theme = defaultTheme
+            shareVC.delegate = self
+            
+            let navController = UINavigationController(rootViewController: shareVC)
+            navController.modalPresentationStyle = .fullScreen
+            present(navController, animated: true)
+        }
+        
+        // MARK: - ThemeShareDelegate
+        
+        func didImportTheme(_ theme: ColorTheme) {
+            // Add the imported theme to custom themes
+            ThemeManager.shared.registerCustomTheme(theme)
+            
+            // Refresh the themes list by getting fresh data
+            let customThemes = ThemeManager.shared.loadCustomThemes()
+            tableView.reloadData()
+            
+            // Show confirmation
+            let alert = UIAlertController(
+                title: "Theme Imported",
+                message: "Successfully imported theme: \(theme.name)",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+        }
+        
+        // MARK: - ThemeScannerDelegate
+        
+        func didScanTheme(_ theme: ColorTheme) {
+            // Same implementation as didImportTheme
+            didImportTheme(theme)
+        }
+        
         // MARK: - UITableViewDataSource
         
         func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -119,12 +228,70 @@ class SettingsViewController: UIViewController {
         }
         
         func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-            guard let cell = tableView.dequeueReusableCell(withIdentifier: "ThemePreviewCell", for: indexPath) as? ThemePreviewCell else {
-                return UITableViewCell()
+            // Use the same cell style as in CustomThemesViewController
+            let cell = tableView.dequeueReusableCell(withIdentifier: newThemeCell, for: indexPath)
+            
+            // Clear any existing subviews from reused cells
+            for subview in cell.contentView.subviews {
+                subview.removeFromSuperview()
             }
             
             let theme = allThemes[indexPath.row]
-            cell.configure(with: theme)
+            
+            // Create label for theme name text
+            let titleLabel = UILabel()
+            titleLabel.text = theme.name
+            titleLabel.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+            titleLabel.translatesAutoresizingMaskIntoConstraints = false
+            cell.contentView.addSubview(titleLabel)
+            
+            // Create a stack view for the color blocks
+            let colorStackView = UIStackView()
+            colorStackView.axis = .horizontal
+            colorStackView.distribution = .fillEqually
+            colorStackView.spacing = 4
+            colorStackView.translatesAutoresizingMaskIntoConstraints = false
+            
+            // Add color blocks
+            let colors: [UIColor] = [theme.primaryColor, theme.secondaryColor, theme.accentColor, theme.backgroundColor]
+            for (index, color) in colors.enumerated() {
+                let colorBlock = UIView()
+                colorBlock.backgroundColor = color
+                colorBlock.layer.cornerRadius = 4
+                colorStackView.addArrangedSubview(colorBlock)
+                
+                // Add "Aa" label to the last color block
+                if index == 3 {
+                    let textLabel = UILabel()
+                    textLabel.text = "Aa"
+                    textLabel.textColor = theme.textColor
+                    textLabel.textAlignment = .center
+                    textLabel.font = UIFont.systemFont(ofSize: 14)
+                    textLabel.translatesAutoresizingMaskIntoConstraints = false
+                    colorBlock.addSubview(textLabel)
+                    
+                    NSLayoutConstraint.activate([
+                        textLabel.centerXAnchor.constraint(equalTo: colorBlock.centerXAnchor),
+                        textLabel.centerYAnchor.constraint(equalTo: colorBlock.centerYAnchor)
+                    ])
+                }
+            }
+            
+            // Add the stack view to the cell
+            cell.contentView.addSubview(colorStackView)
+            
+            // Configure constraints to match the Custom Themes layout
+            NSLayoutConstraint.activate([
+                // Title label constraints
+                titleLabel.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 16),
+                titleLabel.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor),
+                
+                // Color stack constraints
+                colorStackView.leadingAnchor.constraint(equalTo: titleLabel.trailingAnchor, constant: 12),
+                colorStackView.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor),
+                colorStackView.heightAnchor.constraint(equalToConstant: 24),
+                colorStackView.widthAnchor.constraint(equalToConstant: 120)
+            ])
             
             // Check if this is the currently selected theme
             if theme.name == selectedTheme.name {
@@ -132,6 +299,8 @@ class SettingsViewController: UIViewController {
             } else {
                 cell.accessoryType = .none
             }
+            
+            cell.selectionStyle = .default
             
             return cell
         }
@@ -169,32 +338,38 @@ class SettingsViewController: UIViewController {
         }
         
         func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-            return 80 // Taller rows to fit theme preview
+            return 80 // Same height as in Custom Themes view
         }
     }
     
     // MARK: - Custom Themes View Controller
-    class CustomThemesViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+    class CustomThemesViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, ThemeShareDelegate, ThemeScannerDelegate, UITableViewDragDelegate, UITableViewDropDelegate {
+        private let newThemeCell = "NewThemeCell"
+        private let themeCell = "ThemePreviewCell"
         private let tableView = UITableView()
         weak var delegate: SettingsViewController?
-        private var customThemes: [ColorTheme] = []
         
         override func viewDidLoad() {
             super.viewDidLoad()
-            
-            customThemes = ThemeManager.shared.loadCustomThemes()
             
             // Setup navigation bar
             title = "Custom Themes"
             navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(cancelButtonTapped))
             
+            // Add scan QR code button
+            let scanButton = UIBarButtonItem(image: UIImage(systemName: "qrcode.viewfinder"), style: .plain, target: self, action: #selector(scanQRButtonTapped))
+            navigationItem.rightBarButtonItem = scanButton
+            
             // Setup table view
             view.backgroundColor = .systemBackground
             tableView.dataSource = self
             tableView.delegate = self
-            tableView.register(ThemePreviewCell.self, forCellReuseIdentifier: "ThemePreviewCell")
+            tableView.dragDelegate = self
+            tableView.dropDelegate = self
+            tableView.register(ThemePreviewCell.self, forCellReuseIdentifier: themeCell)
+            tableView.register(UITableViewCell.self, forCellReuseIdentifier: newThemeCell)
             tableView.allowsSelection = true
-            tableView.isEditing = true
+            tableView.isEditing = false
             view.addSubview(tableView)
             
             // Layout
@@ -211,34 +386,150 @@ class SettingsViewController: UIViewController {
             dismiss(animated: true)
         }
         
+        @objc private func scanQRButtonTapped() {
+            let scanVC = ThemeScannerViewController()
+            scanVC.delegate = self
+            present(scanVC, animated: true)
+        }
+        
+        @objc private func shareThemeButtonTapped(_ sender: UIButton) {
+            let index = sender.tag
+            let customThemes = getFilteredCustomThemes()
+            guard index < customThemes.count else { return }
+            
+            let theme = customThemes[index]
+            let shareVC = ThemeShareViewController()
+            shareVC.theme = theme
+            shareVC.delegate = self
+            
+            let navController = UINavigationController(rootViewController: shareVC)
+            navController.modalPresentationStyle = .fullScreen
+            present(navController, animated: true)
+        }
+        
+        // MARK: - ThemeShareDelegate
+        
+        func didImportTheme(_ theme: ColorTheme) {
+            // Register the imported theme
+            ThemeManager.shared.registerCustomTheme(theme)
+            
+            // Show confirmation
+            let alert = UIAlertController(
+                title: "Theme Imported",
+                message: "Successfully imported theme: \(theme.name)",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+            
+            // Reload table view to show the new theme
+            tableView.reloadData()
+        }
+        
+        // MARK: - ThemeScannerDelegate
+        
+        func didScanTheme(_ theme: ColorTheme) {
+            // Same implementation as didImportTheme
+            didImportTheme(theme)
+        }
+        
         // MARK: - UITableViewDataSource
         
+        private func getFilteredCustomThemes() -> [ColorTheme] {
+            // Filter out any theme that also has the name "New Theme" to avoid duplication
+            return ThemeManager.shared.loadCustomThemes().filter { $0.name != "New Theme" }
+        }
+        
         func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-            return customThemes.count
+            return getFilteredCustomThemes().count
         }
         
         func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-            guard let cell = tableView.dequeueReusableCell(withIdentifier: "ThemePreviewCell", for: indexPath) as? ThemePreviewCell else {
-                return UITableViewCell()
-            }
             
-            let theme = customThemes[indexPath.row]
-            cell.configure(with: theme)
-            
-            return cell
+                // Regular custom theme cells - using same layout as New Theme cell
+                let cell = tableView.dequeueReusableCell(withIdentifier: newThemeCell, for: indexPath)
+                
+                // Clear any existing subviews from reused cells
+                for subview in cell.contentView.subviews {
+                    subview.removeFromSuperview()
+                }
+                
+                let customThemes = getFilteredCustomThemes()
+                let theme = customThemes[indexPath.row] // Adjust index for the "New Theme" row
+                
+                // Create label for theme name text
+                let titleLabel = UILabel()
+                titleLabel.text = theme.name
+                titleLabel.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+                titleLabel.translatesAutoresizingMaskIntoConstraints = false
+                cell.contentView.addSubview(titleLabel)
+                
+                // Create a stack view for the color blocks
+                let colorStackView = UIStackView()
+                colorStackView.axis = .horizontal
+                colorStackView.distribution = .fillEqually
+                colorStackView.spacing = 4
+                colorStackView.translatesAutoresizingMaskIntoConstraints = false
+                
+                // Add color blocks
+                let colors: [UIColor] = [theme.primaryColor, theme.secondaryColor, theme.accentColor, theme.backgroundColor]
+                for (index, color) in colors.enumerated() {
+                    let colorBlock = UIView()
+                    colorBlock.backgroundColor = color
+                    colorBlock.layer.cornerRadius = 4
+                    colorStackView.addArrangedSubview(colorBlock)
+                    
+                    // Add "Aa" label to the last color block
+                    if index == 3 {
+                        let textLabel = UILabel()
+                        textLabel.text = "Aa"
+                        textLabel.textColor = theme.textColor
+                        textLabel.textAlignment = .center
+                        textLabel.font = UIFont.systemFont(ofSize: 14)
+                        textLabel.translatesAutoresizingMaskIntoConstraints = false
+                        colorBlock.addSubview(textLabel)
+                        
+                        NSLayoutConstraint.activate([
+                            textLabel.centerXAnchor.constraint(equalTo: colorBlock.centerXAnchor),
+                            textLabel.centerYAnchor.constraint(equalTo: colorBlock.centerYAnchor)
+                        ])
+                    }
+                }
+                
+                // Share buttons have been removed from theme cells per requirement
+                
+                // Add the stack view to the cell
+                cell.contentView.addSubview(colorStackView)
+                
+                // Configure constraints to match the New Theme row layout
+                NSLayoutConstraint.activate([
+                    // Title label constraints
+                    titleLabel.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 16),
+                    titleLabel.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor),
+                    
+                    // Color stack constraints
+                    colorStackView.leadingAnchor.constraint(equalTo: titleLabel.trailingAnchor, constant: 12),
+                    colorStackView.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor),
+                    colorStackView.heightAnchor.constraint(equalToConstant: 24),
+                    colorStackView.widthAnchor.constraint(equalToConstant: 120),
+                    
+                    // Share button constraints have been removed
+                ])
+                
+                cell.selectionStyle = .default
+                
+                return cell
         }
         
         // MARK: - UITableViewDelegate
         
         func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+            let customThemes = getFilteredCustomThemes()
             let theme = customThemes[indexPath.row]
-            
-            // Show edit screen
             let editVC = ThemeEditViewController()
             editVC.delegate = delegate
             editVC.theme = theme
             editVC.isThemeEditing = true
-            
             navigationController?.pushViewController(editVC, animated: true)
         }
         
@@ -246,20 +537,13 @@ class SettingsViewController: UIViewController {
             return true
         }
         
+        // Add this method to handle tableView editing actions
         func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
             if editingStyle == .delete {
+                let customThemes = getFilteredCustomThemes()
                 let themeToDelete = customThemes[indexPath.row]
-                
-                // Delete the theme
                 ThemeManager.shared.deleteCustomTheme(named: themeToDelete.name)
-                
-                // Update the data source
-                customThemes.remove(at: indexPath.row)
-                
-                // Update the UI
                 tableView.deleteRows(at: [indexPath], with: .automatic)
-                
-                // If the current theme was deleted, switch to Auto Light and Dark theme
                 if delegate?.currentTheme.name == themeToDelete.name {
                     delegate?.currentTheme = ColorTheme.defaultTheme
                     delegate?.tableView.reloadData()
@@ -270,10 +554,56 @@ class SettingsViewController: UIViewController {
         func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
             return 80
         }
+        
+        // MARK: - UITableViewDragDelegate
+        
+        @objc private func shareDefaultTheme() {
+            // Create a default theme template with the colors shown in the UI
+            let defaultTheme = ColorTheme(
+                name: "New Theme",
+                primaryColor: .systemBlue,
+                secondaryColor: .systemGreen,
+                accentColor: .systemOrange,
+                backgroundColor: .black,
+                textColor: .white,
+                secondaryTextColor: .lightGray
+            )
+            
+            // Create and present share view controller
+            let shareVC = ThemeShareViewController()
+            shareVC.theme = defaultTheme
+            shareVC.delegate = self
+            
+            let navController = UINavigationController(rootViewController: shareVC)
+            navController.modalPresentationStyle = .fullScreen
+            present(navController, animated: true)
+        }
+        
+        func tableView(_ tableView: UITableView, itemsForBeginning session: UIDragSession, at indexPath: IndexPath) -> [UIDragItem] {
+                let customThemes = getFilteredCustomThemes()
+                let theme = customThemes[indexPath.row]
+                let itemProvider = NSItemProvider(object: theme.name as NSString)
+                let dragItem = UIDragItem(itemProvider: itemProvider)
+                dragItem.localObject = theme
+                return [dragItem]
+            }
+        
+        // MARK: - UITableViewDropDelegate
+        
+        func tableView(_ tableView: UITableView, performDropWith coordinator: UITableViewDropCoordinator) {
+            // Implementation for drop handling if needed
+            // Since we're primarily using the built-in editing mode for deletion,
+            // we can leave this minimal for now
+            return
+        }
+        
+        func tableView(_ tableView: UITableView, dropSessionDidUpdate session: UIDropSession, withDestinationIndexPath destinationIndexPath: IndexPath?) -> UITableViewDropProposal {
+            return UITableViewDropProposal(operation: .move, intent: .insertAtDestinationIndexPath)
+        }
     }
     
     // MARK: - Theme Edit View Controller
-    class ThemeEditViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+    class ThemeEditViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, ThemeShareDelegate, ThemeScannerDelegate {
         private let tableView = UITableView(frame: .zero, style: .insetGrouped)
         weak var delegate: SettingsViewController?
         var theme: ColorTheme = ColorTheme(name: "New Theme", primaryColor: .systemBlue, secondaryColor: .systemGreen, accentColor: .systemOrange, backgroundColor: .systemBackground, textColor: .label, secondaryTextColor: .secondaryLabel)
@@ -282,12 +612,24 @@ class SettingsViewController: UIViewController {
         private let colorProperties = ["Name", "Primary Color", "Secondary Color", "Accent Color", "Background Color", "Text Color", "Secondary Text Color"]
         
         override func viewDidLoad() {
-            super.viewDidLoad()
+        super.viewDidLoad()
+        
+        // Setup navigation bar
+        title = isThemeEditing ? "Edit Theme" : "Create Theme"
+        navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(cancelButtonTapped))
+        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .save, target: self, action: #selector(saveButtonTapped))
+        
+        // Set navigation bar appearance based on background color
+        let isDarkBackground = !theme.backgroundColor.isLight
+        if isDarkBackground {
+            navigationController?.navigationBar.tintColor = .white
+            navigationController?.navigationBar.titleTextAttributes = [NSAttributedString.Key.foregroundColor: UIColor.white]
+        } else {
+            navigationController?.navigationBar.tintColor = .systemBlue
+            navigationController?.navigationBar.titleTextAttributes = [NSAttributedString.Key.foregroundColor: UIColor.black]
+        }
             
-            // Setup navigation bar
-            title = isThemeEditing ? "Edit Theme" : "Create Theme"
-            navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(cancelButtonTapped))
-            navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .save, target: self, action: #selector(saveButtonTapped))
+            // No share button in navigation bar
             
             // Setup table view
             view.backgroundColor = .systemBackground
@@ -296,14 +638,82 @@ class SettingsViewController: UIViewController {
             tableView.register(UITableViewCell.self, forCellReuseIdentifier: "ColorCell")
             view.addSubview(tableView)
             
-            // Layout
-            tableView.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-                tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-            ])
+            // Add a Share button if editing an existing theme
+            if isThemeEditing {
+                let shareThemeButton = UIButton(type: .system)
+                shareThemeButton.setTitle("Share Theme", for: .normal)
+                // Create properly sized share icon with correct proportions
+                let symbolConfig = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium, scale: .default)
+                let shareIcon = UIImage(systemName: "square.and.arrow.up", withConfiguration: symbolConfig)
+                
+                // Use a stack view instead of relying on imageEdgeInsets
+                let iconView = UIImageView(image: shareIcon)
+                iconView.contentMode = .scaleAspectFit
+                iconView.tintColor = theme.primaryColor.isLight ? .black : .white
+                
+                let titleLabel = UILabel()
+                titleLabel.text = "Share Theme"
+                titleLabel.font = UIFont.systemFont(ofSize: 18, weight: .medium)
+                titleLabel.textColor = theme.primaryColor.isLight ? .black : .white
+                
+                let stackView = UIStackView(arrangedSubviews: [iconView, titleLabel])
+                stackView.axis = .horizontal
+                stackView.alignment = .center
+                stackView.spacing = 8
+                stackView.distribution = .fillProportionally
+                
+                // Remove title and image from button and use stack view instead
+                shareThemeButton.setTitle(nil, for: .normal)
+                shareThemeButton.setImage(nil, for: .normal)
+                
+                // Add stack view to button
+                stackView.translatesAutoresizingMaskIntoConstraints = false
+                shareThemeButton.addSubview(stackView)
+                
+                // Center the stack view in the button
+                NSLayoutConstraint.activate([
+                    stackView.centerXAnchor.constraint(equalTo: shareThemeButton.centerXAnchor),
+                    stackView.centerYAnchor.constraint(equalTo: shareThemeButton.centerYAnchor)
+                ])
+                shareThemeButton.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .medium)
+                shareThemeButton.backgroundColor = theme.primaryColor
+                shareThemeButton.tintColor = theme.primaryColor.isLight ? .black : .white
+                shareThemeButton.setTitleColor(theme.primaryColor.isLight ? .black : .white, for: .normal)
+                shareThemeButton.contentEdgeInsets = UIEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
+                shareThemeButton.layer.cornerRadius = 10
+                shareThemeButton.layer.shadowColor = UIColor.black.cgColor
+                shareThemeButton.layer.shadowOffset = CGSize(width: 0, height: 2)
+                shareThemeButton.layer.shadowRadius = 4
+                shareThemeButton.layer.shadowOpacity = 0.2
+                shareThemeButton.addTarget(self, action: #selector(shareButtonTapped), for: .touchUpInside)
+                shareThemeButton.translatesAutoresizingMaskIntoConstraints = false
+                view.addSubview(shareThemeButton)
+                
+                NSLayoutConstraint.activate([
+                    shareThemeButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+                    shareThemeButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                    shareThemeButton.widthAnchor.constraint(equalToConstant: 200),
+                    shareThemeButton.heightAnchor.constraint(equalToConstant: 44)
+                ])
+                
+                // Adjust table view height to accommodate the button
+                tableView.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([
+                    tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+                    tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                    tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                    tableView.bottomAnchor.constraint(equalTo: shareThemeButton.topAnchor, constant: -20)
+                ])
+            } else {
+                // Layout for table view without the share button
+                tableView.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([
+                    tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+                    tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                    tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                    tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+                ])
+            }
             
             // Add color picker view if needed
             updateBackgroundWithTheme()
@@ -311,6 +721,44 @@ class SettingsViewController: UIViewController {
         
         @objc private func cancelButtonTapped() {
             dismiss(animated: true)
+        }
+        
+        @objc private func scanQRButtonTapped() {
+            let scanVC = ThemeScannerViewController()
+            scanVC.delegate = self
+            present(scanVC, animated: true)
+        }
+        
+        // MARK: - ThemeShareDelegate
+        
+        func didImportTheme(_ theme: ColorTheme) {
+            // Register the imported theme
+            ThemeManager.shared.registerCustomTheme(theme)
+            
+            // Show confirmation
+            let alert = UIAlertController(
+                title: "Theme Imported",
+                message: "Successfully imported theme: \(theme.name)",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+        }
+        
+        // MARK: - ThemeScannerDelegate
+        
+        func didScanTheme(_ theme: ColorTheme) {
+            // Same implementation as didImportTheme
+            didImportTheme(theme)
+        }
+        
+        @objc private func shareButtonTapped() {
+            let shareVC = ThemeShareViewController()
+            shareVC.theme = theme
+            shareVC.delegate = self
+            
+            let navController = UINavigationController(rootViewController: shareVC)
+            present(navController, animated: true)
         }
         
         @objc private func saveButtonTapped() {
@@ -343,10 +791,54 @@ class SettingsViewController: UIViewController {
         }
         
         internal func updateBackgroundWithTheme() {
-            // Apply the theme's colors to the view for preview
-            view.backgroundColor = theme.backgroundColor
-            tableView.backgroundColor = theme.backgroundColor.darker(by: 5)
+        // Apply the theme's colors to the view for preview
+        view.backgroundColor = theme.backgroundColor
+        tableView.backgroundColor = theme.backgroundColor.darker(by: 5)
+        
+        // Set appropriate cell text colors based on background color darkness
+        let isDarkBackground = !theme.backgroundColor.isLight
+        
+        // If background is dark, ensure text is visible
+        if isDarkBackground {
+        // Apply text colors to table view
+        tableView.separatorColor = .lightGray
+        
+            // Force refresh all visible cells
+                for cell in tableView.visibleCells {
+                cell.textLabel?.textColor = .white
+                cell.detailTextLabel?.textColor = .lightGray
+                
+                // Update any text fields in the cells
+                for subview in cell.contentView.subviews {
+                    if let textField = subview as? UITextField {
+                        textField.textColor = .white
+                    }
+                }
+                
+                // Ensure accessory views are visible
+                if let colorPreview = cell.accessoryView as? UIView, colorPreview.frame.size.width == 24 && colorPreview.frame.size.height == 24 {
+                    colorPreview.layer.borderColor = UIColor.white.cgColor
+                }
+            }
         }
+        
+        // Update share button color if it exists
+        if isThemeEditing {
+            // Find the share button by looking for a UIButton that has nil title (since we removed the title)
+            if let shareButton = view.subviews.first(where: { 
+                if let button = $0 as? UIButton, 
+                   button.subviews.contains(where: { $0 is UIStackView }) {
+                    return true
+                }
+                return false
+            }) as? UIButton {
+                shareButton.backgroundColor = theme.primaryColor
+                let textColor = theme.primaryColor.isLight ? UIColor.black : UIColor.white
+                shareButton.tintColor = textColor
+                shareButton.setTitleColor(textColor, for: .normal)
+            }
+        }
+    }
         
         // Add method to reload table data
         func reloadTableData() {
@@ -368,38 +860,55 @@ class SettingsViewController: UIViewController {
         }
         
         func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-            let cell = tableView.dequeueReusableCell(withIdentifier: "ColorCell", for: indexPath)
+        let cell = tableView.dequeueReusableCell(withIdentifier: "ColorCell", for: indexPath)
+        
+        // Set cell background color to maintain theme preview
+        cell.backgroundColor = theme.backgroundColor
+        
+        // Determine if background is dark to set appropriate text colors
+        let isDarkBackground = !theme.backgroundColor.isLight
+        let textColor = isDarkBackground ? UIColor.white : UIColor.black
+        let secondaryTextColor = isDarkBackground ? UIColor.lightGray : UIColor.darkGray
+        
+        // Apply text color
+        cell.textLabel?.textColor = textColor
+        cell.detailTextLabel?.textColor = secondaryTextColor
+        
+        if indexPath.section == 0 {
+        // Theme name cell
+        cell.textLabel?.text = "Name"
+        
+        let nameField = UITextField(frame: CGRect(x: 0, y: 0, width: 150, height: 30))
+        nameField.text = theme.name
+        nameField.placeholder = "Enter theme name"
+        nameField.textAlignment = .right
+        nameField.textColor = textColor
+        nameField.backgroundColor = isDarkBackground ? UIColor.darkGray : UIColor.white
+        nameField.addTarget(self, action: #selector(themeNameChanged(_:)), for: .editingChanged)
+        cell.accessoryView = nameField
+        } else {
+        // Color selection cells
+        let propertyIndex = indexPath.row + 1 // Skip "Name" which is handled separately
+            let propertyName = colorProperties[propertyIndex]
+            cell.textLabel?.text = propertyName
             
-            if indexPath.section == 0 {
-                // Theme name cell
-                cell.textLabel?.text = "Name"
-                
-                let nameField = UITextField(frame: CGRect(x: 0, y: 0, width: 150, height: 30))
-                nameField.text = theme.name
-                nameField.placeholder = "Enter theme name"
-                nameField.textAlignment = .right
-                nameField.addTarget(self, action: #selector(themeNameChanged(_:)), for: .editingChanged)
-                cell.accessoryView = nameField
-            } else {
-                // Color selection cells
-                let propertyIndex = indexPath.row + 1 // Skip "Name" which is handled separately
-                let propertyName = colorProperties[propertyIndex]
-                cell.textLabel?.text = propertyName
-                
-                let colorIndex = indexPath.row
-                let color = getColorForIndex(colorIndex)
-                
-                let colorPreview = UIView(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
-                colorPreview.backgroundColor = color
-                colorPreview.layer.cornerRadius = 12
-                colorPreview.layer.borderWidth = 1
-                colorPreview.layer.borderColor = UIColor.lightGray.cgColor
-                
-                cell.accessoryView = colorPreview
-                cell.accessoryType = .disclosureIndicator
-            }
+            let colorIndex = indexPath.row
+            let color = getColorForIndex(colorIndex)
             
-            return cell
+            let colorPreview = UIView(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
+            colorPreview.backgroundColor = color
+            colorPreview.layer.cornerRadius = 12
+            colorPreview.layer.borderWidth = 1
+            colorPreview.layer.borderColor = isDarkBackground ? UIColor.white.cgColor : UIColor.lightGray.cgColor
+            
+            cell.accessoryView = colorPreview
+            cell.accessoryType = .disclosureIndicator
+            
+            // Use a contrasting tint color for the disclosure indicator
+            cell.tintColor = textColor
+        }
+        
+        return cell
         }
         
         @objc private func themeNameChanged(_ sender: UITextField) {
@@ -434,7 +943,10 @@ class SettingsViewController: UIViewController {
             colorPickerVC.delegate = self
             colorPickerVC.colorIndex = colorIndex
             colorPickerVC.initialColor = getColorForIndex(colorIndex)
-            navigationController?.pushViewController(colorPickerVC, animated: true)
+            
+            // Use a navigation controller to present the color picker
+            let navController = UINavigationController(rootViewController: colorPickerVC)
+            present(navController, animated: true, completion: nil)
         }
     }
     
@@ -460,6 +972,12 @@ class SettingsViewController: UIViewController {
             title = "Choose Color"
             view.backgroundColor = .systemBackground
             
+            // Add cancel button to navigation bar
+            navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(backButtonTapped))
+            
+            // Add done button to navigation bar
+            navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(doneButtonTapped))
+            
             // Setup color picker
             colorPicker.selectedColor = initialColor
             colorPicker.supportsAlpha = false
@@ -470,6 +988,8 @@ class SettingsViewController: UIViewController {
             // Setup preview view
             previewView.backgroundColor = initialColor
             previewView.layer.cornerRadius = 8
+            previewView.layer.borderWidth = 1
+            previewView.layer.borderColor = initialColor.isLight ? UIColor.black.cgColor : UIColor.white.cgColor
             previewView.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(previewView)
             
@@ -497,14 +1017,21 @@ class SettingsViewController: UIViewController {
                 hexLabel.widthAnchor.constraint(equalToConstant: 200)
             ])
             
-            // Add done button
-            navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(doneButtonTapped))
+            // We're now using the navigation bar buttons instead of this separate done button
         }
         
         @objc private func colorChanged(_ sender: UIColorWell) {
             guard let color = sender.selectedColor else { return }
             previewView.backgroundColor = color
             hexLabel.text = color.toHex
+            
+            // Update border color based on the brightness of the selected color
+            previewView.layer.borderWidth = 1
+            previewView.layer.borderColor = color.isLight ? UIColor.black.cgColor : UIColor.white.cgColor
+        }
+        
+        @objc private func backButtonTapped() {
+            dismiss(animated: true, completion: nil)
         }
         
         @objc private func doneButtonTapped() {
@@ -524,7 +1051,7 @@ class SettingsViewController: UIViewController {
             delegate?.updateBackgroundWithTheme()
             reloadDelegateTableView()
             
-            navigationController?.popViewController(animated: true)
+            dismiss(animated: true, completion: nil)
         }
     }
     
@@ -566,10 +1093,12 @@ class SettingsViewController: UIViewController {
             colorPreviewContainer.distribution = .fillEqually
             colorPreviewContainer.spacing = 4
             
-            // Add color blocks
+            // Add color blocks - all the same size
             for _ in 0..<3 {
-                let colorBlock = UIView()
-                colorBlock.layer.cornerRadius = 4
+            let colorBlock = UIView()
+            colorBlock.layer.cornerRadius = 4
+            colorBlock.layer.borderWidth = 1
+                colorBlock.layer.borderColor = UIColor.lightGray.cgColor
                 colorPreviewContainer.addArrangedSubview(colorBlock)
             }
             
@@ -595,7 +1124,7 @@ class SettingsViewController: UIViewController {
                 
                 previewLabel.centerYAnchor.constraint(equalTo: colorPreviewContainer.centerYAnchor),
                 previewLabel.leadingAnchor.constraint(equalTo: colorPreviewContainer.trailingAnchor, constant: 16),
-                previewLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+                previewLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -50),
                 previewLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -10)
             ])
         }
@@ -605,18 +1134,29 @@ class SettingsViewController: UIViewController {
             
             // Update color blocks
             if let blocks = colorPreviewContainer.arrangedSubviews as? [UIView], blocks.count >= 3 {
+                // Secondary color
                 blocks[0].backgroundColor = theme.secondaryColor
+                blocks[0].layer.borderColor = theme.secondaryColor.isLight ? UIColor.black.cgColor : UIColor.white.cgColor
+                
+                // Primary color
                 blocks[1].backgroundColor = theme.primaryColor
+                blocks[1].layer.borderColor = theme.primaryColor.isLight ? UIColor.black.cgColor : UIColor.white.cgColor
+                
+                // Accent color
                 blocks[2].backgroundColor = theme.accentColor
+                blocks[2].layer.borderColor = theme.accentColor.isLight ? UIColor.black.cgColor : UIColor.white.cgColor
             }
             
             // Create a background view to show theme background color
             let backgroundView = UIView()
             backgroundView.backgroundColor = theme.backgroundColor
             backgroundView.layer.cornerRadius = 4
+            backgroundView.layer.borderWidth = 1
+            backgroundView.layer.borderColor = theme.backgroundColor.isLight ? UIColor.black.cgColor : UIColor.white.cgColor
             
             // Important: Set the text color directly from the theme
             previewLabel.textColor = theme.textColor
+            previewLabel.text = "Aa"  // Ensure text is always "Aa"
             
             // Remove old background preview if it exists
             backgroundPreview?.removeFromSuperview()
@@ -902,11 +1442,16 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
                 cell.accessoryType = .disclosureIndicator
                 
                 // Show the currently selected font name
-                let fontLabel = UILabel(frame: CGRect(x: 0, y: 0, width: 120, height: 20))
+                let fontLabel = UILabel()
                 fontLabel.text = fontName
                 fontLabel.textAlignment = .right
                 fontLabel.font = UIFont.systemFont(ofSize: 14)
                 fontLabel.textColor = .secondaryLabel
+                
+                // Size the label to fit content with some padding
+                fontLabel.sizeToFit()
+                let labelWidth = min(max(fontLabel.frame.width + 10, 120), 200) // Min 120, max 200 width
+                fontLabel.frame = CGRect(x: 0, y: 0, width: labelWidth, height: 20)
                 cell.accessoryView = fontLabel
                 
             default:
@@ -919,11 +1464,17 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
                 cell.textLabel?.text = "Current Theme"
                 cell.accessoryType = .disclosureIndicator
                 
-                let themeLabel = UILabel(frame: CGRect(x: 0, y: 0, width: 120, height: 20))
+                // Calculate width needed for theme name
+                let themeLabel = UILabel()
                 themeLabel.text = currentTheme.name
                 themeLabel.textAlignment = .right
                 themeLabel.font = UIFont.systemFont(ofSize: 14)
                 themeLabel.textColor = .secondaryLabel
+                
+                // Size the label to fit content with some padding
+                themeLabel.sizeToFit()
+                let labelWidth = min(max(themeLabel.frame.width + 10, 120), 200) // Min 120, max 200 width
+                themeLabel.frame = CGRect(x: 0, y: 0, width: labelWidth, height: 20)
                 cell.accessoryView = themeLabel
                 
             case 1: // Edit custom themes
@@ -1051,13 +1602,13 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         
         // Add action to create the app
         let addAction = UIAlertAction(title: "Add", style: .default) { [weak self] _ in
-            guard let self = self, 
+            guard let self = self,
                   let textField = alert.textFields?.first,
                   let appName = textField.text, !appName.isEmpty else { return }
             
             // Create a new app with random color
-            let appColors: [UIColor] = [.systemBlue, .systemGreen, .systemIndigo, 
-                                        .systemOrange, .systemYellow, .systemRed, 
+            let appColors: [UIColor] = [.systemBlue, .systemGreen, .systemIndigo,
+                                        .systemOrange, .systemYellow, .systemRed,
                                         .systemPurple, .systemTeal]
             let randomColor = appColors.randomElement() ?? .systemBlue
             

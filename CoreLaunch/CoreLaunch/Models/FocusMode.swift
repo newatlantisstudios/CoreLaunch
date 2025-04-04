@@ -170,6 +170,9 @@ class FocusModeManager: Codable {
         // Post notification that focus mode started
         NotificationCenter.default.post(name: NSNotification.Name("FocusModeStateChanged"), object: nil)
         
+        // Update widget
+        updateWidget()
+        
         return session
     }
     
@@ -188,6 +191,9 @@ class FocusModeManager: Codable {
         
         // Post notification that focus mode was scheduled
         NotificationCenter.default.post(name: NSNotification.Name("FocusModeStateChanged"), object: nil)
+        
+        // Update widget
+        updateWidget()
         
         return session
     }
@@ -220,6 +226,9 @@ class FocusModeManager: Codable {
         
         // Post notification that focus mode ended
         NotificationCenter.default.post(name: NSNotification.Name("FocusModeStateChanged"), object: nil)
+        
+        // Update widget
+        updateWidget()
     }
     
     /// Cancel scheduled focus session
@@ -229,6 +238,9 @@ class FocusModeManager: Codable {
         
         // Post notification that focus mode schedule changed
         NotificationCenter.default.post(name: NSNotification.Name("FocusModeStateChanged"), object: nil)
+        
+        // Update widget
+        updateWidget()
     }
     
     /// Check if an app is currently blocked by focus mode
@@ -249,6 +261,11 @@ class FocusModeManager: Codable {
         } else {
             return .inactive
         }
+    }
+    
+    /// Get the active focus session if one exists and is active
+    func getActiveFocusSession() -> FocusSession? {
+        return activeFocusSession?.isActive == true ? activeFocusSession : nil
     }
     
     /// Get focus session history
@@ -420,6 +437,10 @@ class FocusModeManager: Codable {
         userDefaults.set(distractingApps, forKey: distractingAppsKey)
     }
     
+    private func updateWidget() {
+        // Widget functionality removed
+    }
+    
     private func checkForActiveSessions() {
         // Check if the active session is still valid
         if let session = activeFocusSession {
@@ -467,6 +488,11 @@ class FocusModeManager: Codable {
             } else {
                 // Post notification to update any UI showing the timer
                 NotificationCenter.default.post(name: NSNotification.Name("FocusModeTimerUpdated"), object: nil)
+                
+                // Update widget every 15 seconds to keep timer current
+                if Int(activeSession.remainingTime) % 15 == 0 {
+                    updateWidget()
+                }
             }
         }
     }
