@@ -445,4 +445,8 @@ class ThemeManager {
         let customThemes = loadCustomThemes()
         return predefinedThemes + customThemes
     }
+    
+    func getTheme(named themeName: String) -> ColorTheme? {
+        return getAllThemes().first(where: { $0.name == themeName })
+    }
 }

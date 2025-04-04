@@ -1,10 +1,36 @@
-//  SettingsViewController.swift
+    func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView? {
+        if section == 7 {
+            let footerView = UIView()
+            
+            let label = UILabel()
+            label.text = "Tools to help you stay focused and mindful when using your apps."
+            label.textColor = .secondaryLabel
+            label.font = UIFont.systemFont(ofSize: 13)
+            label.numberOfLines = 0
+            label.lineBreakMode = .byWordWrapping
+            label.preferredMaxLayoutWidth = UIScreen.main.bounds.width - 32
+            label.translatesAutoresizingMaskIntoConstraints = false
+            
+            footerView.addSubview(label)
+            
+            NSLayoutConstraint.activate([
+                label.topAnchor.constraint(equalTo: footerView.topAnchor, constant: 8),
+                label.leadingAnchor.constraint(equalTo: footerView.leadingAnchor, constant: 16),
+                label.trailingAnchor.constraint(equalTo: footerView.trailingAnchor, constant: -16),
+                label.bottomAnchor.constraint(equalTo: footerView.bottomAnchor, constant: -12)
+            ])
+            
+            return footerView
+        }
+        return nil
+    }//  SettingsViewController.swift
 //  CoreLaunch
 //
 //  Created by x on 4/2/25.
 //
 
 import UIKit
+import Foundation
 
 protocol SettingsDelegate: AnyObject {
     func didUpdateSettings()
@@ -25,6 +51,9 @@ class SettingsViewController: UIViewController {
     // MARK: - Properties
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     weak var delegate: SettingsDelegate?
+    
+    // Profile management
+    private var profiles: [Profile] = []
     
     // Current theme
     private var currentTheme: ColorTheme = ThemeManager.shared.currentTheme
@@ -1208,6 +1237,7 @@ class SettingsViewController: UIViewController {
         tableView.delegate = self
         tableView.dataSource = self
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "SettingsCell")
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "SettingsDetailCell")
         tableView.isEditing = false // Will be toggled to true for the apps section
     }
     
@@ -1217,6 +1247,44 @@ class SettingsViewController: UIViewController {
         delegate?.didUpdateSettings()
         delegate?.didUpdateTheme()
         dismiss(animated: true)
+    }
+    
+    private func showAddProfileDialog() {
+        let alert = UIAlertController(
+            title: "New Profile",
+            message: "Enter a name for your new settings profile",
+            preferredStyle: .alert
+        )
+        
+        alert.addTextField { textField in
+            textField.placeholder = "Profile Name"
+        }
+        
+        let createAction = UIAlertAction(title: "Create", style: .default) { [weak self] _ in
+            guard let self = self, let textField = alert.textFields?.first, 
+                  let profileName = textField.text, !profileName.isEmpty else {
+                return
+            }
+            
+            // Create new profile with current settings
+            let newProfile = ProfileManager.shared.createProfile(name: profileName)
+            
+            // Switch to the new profile
+            if let index = ProfileManager.shared.profiles.firstIndex(where: { $0.id == newProfile.id }) {
+                ProfileManager.shared.switchToProfile(at: index)
+            }
+            
+            // Refresh UI
+            self.loadSettings()
+            self.tableView.reloadData()
+        }
+        
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
+        
+        alert.addAction(createAction)
+        alert.addAction(cancelAction)
+        
+        present(alert, animated: true)
     }
     
     private func saveSettings() {
@@ -1231,6 +1299,9 @@ class SettingsViewController: UIViewController {
         
         // Theme is saved through ThemeManager
         ThemeManager.shared.currentTheme = currentTheme
+        
+        // Update current profile
+        ProfileManager.shared.updateActiveProfile()
     }
     
     private func loadSettings() {
@@ -1253,6 +1324,9 @@ class SettingsViewController: UIViewController {
         
         // Load theme from ThemeManager
         currentTheme = ThemeManager.shared.currentTheme
+        
+        // Refresh profiles list
+        profiles = ProfileManager.shared.profiles
     }
     
     private func loadApps() {
@@ -1274,26 +1348,28 @@ class SettingsViewController: UIViewController {
 extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     
     func numberOfSections(in tableView: UITableView) -> Int {
-        return 8
+        return 9
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch section {
         case 0:
-            return 2 // Time settings
+            return ProfileManager.shared.profiles.count + 1 // Profiles + Add New Profile
         case 1:
-            return 1 // Appearance settings
+            return 2 // Time settings
         case 2:
-            return 1 // Icon settings
+            return 1 // Appearance settings
         case 3:
-            return 1 // Wellness settings
+            return 1 // Icon settings
         case 4:
-            return 2 // Text size and font settings
+            return 1 // Wellness settings
         case 5:
-            return 3 // Theme settings (Select theme, Custom theme, Create new theme)
+            return 2 // Text size and font settings
         case 6:
-            return 2 // Focus & Mindfulness (Focus Mode and Breathing Room)
+            return 3 // Theme settings (Select theme, Custom theme, Create new theme)
         case 7:
+            return 2 // Focus & Mindfulness (Focus Mode and Breathing Room)
+        case 8:
             return allApps.count // App selection
         default:
             return 0
@@ -1303,35 +1379,37 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         switch section {
         case 0:
-            return "Time Display"
+            return "Profiles"
         case 1:
-            return "Appearance"
+            return "Time Display"
         case 2:
-            return "App Icons"
+            return "Appearance"
         case 3:
-            return "Wellness"
+            return "App Icons"
         case 4:
-            return "Text Settings"
+            return "Wellness"
         case 5:
-            return "Theme Settings"
+            return "Text Settings"
         case 6:
-            return "Focus & Mindfulness"
+            return "Theme Settings"
         case 7:
-            return "Home Screen Apps"
+            return "Focus & Mindfulness"
+        case 8:
+            return "HOME SCREEN APPS"
         default:
             return nil
         }
     }
     
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
-        if section == 7 {
+        if section == 8 {
             // Create a header with a button to toggle edit mode
             let headerView = UIView(frame: CGRect(x: 0, y: 0, width: tableView.frame.width, height: 40))
             
             let titleLabel = UILabel()
             titleLabel.translatesAutoresizingMaskIntoConstraints = false
-            titleLabel.text = "Home Screen Apps"
-            titleLabel.font = UIFont.boldSystemFont(ofSize: 16)
+            titleLabel.text = "HOME SCREEN APPS"
+            titleLabel.font = UIFont.systemFont(ofSize: 13) // Match other section headers
             titleLabel.textColor = .secondaryLabel
             headerView.addSubview(titleLabel)
             
@@ -1355,35 +1433,70 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     }
     
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        return section == 4 ? 44 : UITableView.automaticDimension
+        return section == 4 || section == 8 ? 44 : UITableView.automaticDimension
     }
     
     func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
         switch section {
-        case 3:
-            return "Motivational messages will appear on your home screen to encourage digital wellbeing."
+        case 0:
+            return "Create and switch between different setting profiles."
         case 4:
-            return "Adjust the text size and font used throughout the app."
+            return "Motivational messages will appear on your home screen to encourage digital wellbeing."
         case 5:
-            return "Choose a color theme or create your own custom theme."
+            return "Adjust the text size and font used throughout the app."
         case 6:
-            return "Tools to help you stay focused and mindful when using your apps."
+            return "Choose a color theme or create your own custom theme."
         case 7:
+            return "Tools to help you stay focused and mindful when using your apps."
+        case 8:
             return "Toggle which apps appear on your home screen."
         default:
             return nil
         }
     }
     
+    func tableView(_ tableView: UITableView, heightForFooterInSection section: Int) -> CGFloat {
+        // Let the footer height be determined by its content
+        return UITableView.automaticDimension
+    }
+    
+    // Using titleForFooterInSection instead of custom views for better text handling
+    
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "SettingsCell", for: indexPath)
         cell.selectionStyle = .none
+        
+        // Reset any previous image
+        cell.imageView?.image = nil
         
         let switchView = UISwitch()
         cell.accessoryView = switchView
         
         switch indexPath.section {
-        case 0:
+        case 0: // Profiles section
+            cell.accessoryView = nil
+            
+            if indexPath.row < ProfileManager.shared.profiles.count {
+                // Profile cell
+                let profile = ProfileManager.shared.profiles[indexPath.row]
+                cell.textLabel?.text = profile.name
+                
+                // Check if this is the active profile
+                if indexPath.row == ProfileManager.shared.activeProfileIndex {
+                    cell.accessoryType = .checkmark
+                } else {
+                    cell.accessoryType = .none
+                }
+                
+                cell.selectionStyle = .default
+            } else {
+                // Add new profile cell
+                cell.textLabel?.text = "Add New Profile"
+                cell.accessoryType = .disclosureIndicator
+                cell.selectionStyle = .default
+            }
+            
+        case 1:
             switch indexPath.row {
             case 0:
                 cell.textLabel?.text = "24-Hour Time"
@@ -1398,7 +1511,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             default:
                 break
             }
-        case 1:
+        case 2:
             switch indexPath.row {
             case 0:
                 cell.textLabel?.text = "Minimalist Style"
@@ -1408,7 +1521,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             default:
                 break
             }
-        case 2:
+        case 3:
             switch indexPath.row {
             case 0:
                 cell.textLabel?.text = "Monochrome App Icons"
@@ -1418,7 +1531,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             default:
                 break
             }
-        case 3: // Wellness settings
+        case 4: // Wellness settings
             switch indexPath.row {
             case 0:
                 cell.textLabel?.text = "Show Motivational Messages"
@@ -1428,7 +1541,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             default:
                 break
             }
-        case 4: // Text Settings
+        case 5: // Text Settings
             cell.accessoryView = nil // Clear switch for these cells
             
             switch indexPath.row {
@@ -1463,25 +1576,46 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             default:
                 break
             }
-        case 5: // Theme settings
+        case 6: // Theme settings
             cell.accessoryView = nil
             switch indexPath.row {
             case 0: // Theme selection
                 cell.textLabel?.text = "Current Theme"
-                cell.accessoryType = .disclosureIndicator
                 
-                // Calculate width needed for theme name
-                let themeLabel = UILabel()
-                themeLabel.text = currentTheme.name
-                themeLabel.textAlignment = .right
-                themeLabel.font = UIFont.systemFont(ofSize: 14)
-                themeLabel.textColor = .secondaryLabel
+                cell.textLabel?.text = "Current Theme"
                 
-                // Size the label to fit content with some padding
-                themeLabel.sizeToFit()
-                let labelWidth = min(max(themeLabel.frame.width + 10, 120), 200) // Min 120, max 200 width
-                themeLabel.frame = CGRect(x: 0, y: 0, width: labelWidth, height: 20)
-                cell.accessoryView = themeLabel
+                // Add a constraint based approach to show both text and arrow
+                let valueLabel = UILabel()
+                valueLabel.text = currentTheme.name
+                valueLabel.textAlignment = .right
+                valueLabel.font = UIFont.systemFont(ofSize: 16)
+                valueLabel.textColor = .secondaryLabel
+                valueLabel.translatesAutoresizingMaskIntoConstraints = false
+                
+                // Create a container view for the value and arrow
+                let containerView = UIView(frame: CGRect(x: 0, y: 0, width: 200, height: 40))
+                containerView.addSubview(valueLabel)
+                
+                // Create a right arrow image
+                let arrowImage = UIImageView(image: UIImage(systemName: "chevron.right"))
+                arrowImage.tintColor = .tertiaryLabel
+                arrowImage.translatesAutoresizingMaskIntoConstraints = false
+                containerView.addSubview(arrowImage)
+                
+                // Set constraints
+                NSLayoutConstraint.activate([
+                    valueLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+                    valueLabel.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+                    
+                    arrowImage.leadingAnchor.constraint(equalTo: valueLabel.trailingAnchor, constant: 8),
+                    arrowImage.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+                    arrowImage.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+                    arrowImage.widthAnchor.constraint(equalToConstant: 13),
+                    arrowImage.heightAnchor.constraint(equalToConstant: 20)
+                ])
+                
+                cell.accessoryView = containerView
+                cell.selectionStyle = .default
                 
             case 1: // Edit custom themes
                 cell.textLabel?.text = "Edit Custom Themes"
@@ -1495,7 +1629,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
                 break
             }
             
-        case 6: // Focus & Mindfulness
+        case 7: // Focus & Mindfulness
             cell.accessoryType = .disclosureIndicator
             cell.accessoryView = nil // Remove switch view
             
@@ -1514,7 +1648,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
                 break
             }
             
-        case 7: // App selection
+        case 8: // App selection
             if indexPath.row < allApps.count {
                 let app = allApps[indexPath.row]
                 cell.textLabel?.text = app.name
@@ -1666,13 +1800,22 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     // MARK: - Table View Editing Support
     
     func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
-        // Only allow editing in the apps section
-        return indexPath.section == 7
+        // Allow editing in profiles and apps sections
+        return indexPath.section == 0 || indexPath.section == 8
     }
     
     func tableView(_ tableView: UITableView, editingStyleForRowAt indexPath: IndexPath) -> UITableViewCell.EditingStyle {
+        // Handle profiles section
+        if indexPath.section == 0 {
+            // Can't delete the "Add New Profile" row
+            if indexPath.row == ProfileManager.shared.profiles.count {
+                return .none
+            }
+            return .delete
+        }
+        
         // During reordering mode, don't show delete buttons
-        if indexPath.section == 7 && tableView.isEditing {
+        if indexPath.section == 8 && tableView.isEditing {
             return .none
         }
         return .delete
@@ -1680,12 +1823,12 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     
     func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
         // Only allow moving in the apps section
-        return indexPath.section == 7
+        return indexPath.section == 8
     }
     
     func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
         // Ensure we're only moving within the apps section
-        guard sourceIndexPath.section == 7 && destinationIndexPath.section == 7 else { return }
+        guard sourceIndexPath.section == 8 && destinationIndexPath.section == 8 else { return }
         
         // Update the app order in our data model
         let movedApp = allApps.remove(at: sourceIndexPath.row)
@@ -1699,34 +1842,50 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        // Show font picker when font cell is selected
-        if indexPath.section == 4 && indexPath.row == 1 {
-            showFontSelectionMenu(for: indexPath)
-        } else if indexPath.section == 5 {
-            switch indexPath.row {
-            case 0: // Theme selection
-                showThemeSelectionMenu()
-            case 1: // Edit custom themes
-                showCustomThemesMenu()
-            case 2: // Create new theme
-                showCreateThemeMenu()
-            default:
-                break
-            }
-        } else if indexPath.section == 6 {
-            switch indexPath.row {
-            case 0: // Focus Mode
-                let focusModeVC = FocusModeViewController()
-                let navController = UINavigationController(rootViewController: focusModeVC)
-                present(navController, animated: true)
-            case 1: // Breathing Room
-                let breathingRoomVC = BreathingRoomSettingsViewController()
-                let navController = UINavigationController(rootViewController: breathingRoomVC)
-                present(navController, animated: true)
-            default:
-                break
+        // Handle profile selection
+        if indexPath.section == 0 {
+            if indexPath.row < ProfileManager.shared.profiles.count {
+                // Switch to selected profile
+                ProfileManager.shared.switchToProfile(at: indexPath.row)
+                
+                // Reload settings from the selected profile
+                loadSettings()
+                
+                // Update UI
+                tableView.reloadData()
+            } else {
+                // Show dialog to create new profile
+                showAddProfileDialog()
             }
         }
+        // Show font picker when font cell is selected
+        else if indexPath.section == 5 && indexPath.row == 1 {
+            showFontSelectionMenu(for: indexPath)
+        } else if indexPath.section == 6 {
+        switch indexPath.row {
+        case 0: // Theme selection
+            showThemeSelectionMenu()
+        case 1: // Edit custom themes
+            showCustomThemesMenu()
+        case 2: // Create new theme
+            showCreateThemeMenu()
+        default:
+            break
+        }
+    } else if indexPath.section == 7 {
+        switch indexPath.row {
+        case 0: // Focus Mode
+            let focusModeVC = FocusModeViewController()
+            let navController = UINavigationController(rootViewController: focusModeVC)
+            present(navController, animated: true)
+        case 1: // Breathing Room
+            let breathingRoomVC = BreathingRoomSettingsViewController()
+            let navController = UINavigationController(rootViewController: breathingRoomVC)
+            present(navController, animated: true)
+        default:
+            break
+        }
+    }
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
@@ -1881,7 +2040,26 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     }
     
     func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if indexPath.section == 7 && editingStyle == .delete {
+        if indexPath.section == 0 && editingStyle == .delete {
+            // Delete profile
+            if ProfileManager.shared.profiles.count > 1 {
+                ProfileManager.shared.deleteProfile(at: indexPath.row)
+                tableView.deleteRows(at: [indexPath], with: .automatic)
+                
+                // Refresh UI
+                loadSettings()
+                tableView.reloadData()
+            } else {
+                let alert = UIAlertController(
+                    title: "Cannot Delete",
+                    message: "You must have at least one profile",
+                    preferredStyle: .alert
+                )
+                let okAction = UIAlertAction(title: "OK", style: .default)
+                alert.addAction(okAction)
+                present(alert, animated: true)
+            }
+        } else if indexPath.section == 8 && editingStyle == .delete {
             // Prevent deleting all apps - maintain at least one app
             if allApps.count <= 1 {
                 let alert = UIAlertController(

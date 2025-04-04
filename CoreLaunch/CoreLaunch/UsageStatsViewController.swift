@@ -71,6 +71,14 @@ class UsageStatsViewController: UIViewController, CalendarViewDelegate, GoalSett
             action: #selector(closeButtonTapped)
         )
         
+        // Add achievements button to navigation bar
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            image: UIImage(systemName: "trophy"),
+            style: .plain,
+            target: self,
+            action: #selector(achievementsButtonTapped)
+        )
+        
         // Setup scroll view
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         contentView.translatesAutoresizingMaskIntoConstraints = false
@@ -521,6 +529,11 @@ class UsageStatsViewController: UIViewController, CalendarViewDelegate, GoalSett
         goalVC.modalPresentationStyle = .overFullScreen
         goalVC.modalTransitionStyle = .crossDissolve
         present(goalVC, animated: true)
+    }
+    
+    @objc private func achievementsButtonTapped() {
+        let achievementsVC = UsageTracker.shared.getAchievementsDashboard()
+        navigationController?.pushViewController(achievementsVC, animated: true)
     }
     
     // MARK: - CalendarViewDelegate

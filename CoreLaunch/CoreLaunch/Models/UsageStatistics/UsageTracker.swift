@@ -7,6 +7,23 @@
 
 import Foundation
 
+// App usage statistics for use with achievement system
+struct AppUsageStats {
+    let appName: String
+    var totalTimeToday: TimeInterval
+    var totalTimeThisWeek: TimeInterval
+    var totalTimePreviousWeek: TimeInterval
+    var sessionCount: Int
+    
+    init(appName: String) {
+        self.appName = appName
+        self.totalTimeToday = 0
+        self.totalTimeThisWeek = 0
+        self.totalTimePreviousWeek = 0
+        self.sessionCount = 0
+    }
+}
+
 class UsageTracker {
     // MARK: - Properties
     static let shared = UsageTracker()
@@ -287,6 +304,17 @@ class UsageTracker {
         return (currentReduction, target, percentOfTarget)
     }
     
+    /// Calculate the weekly usage reduction percentage
+    func calculateWeeklyReduction() -> Double {
+        // Get current and previous week summaries
+        guard let lastWeekSummary = weeklyUsageSummaries.last else {
+            return 0.0 // No data available
+        }
+        
+        // Return the pre-calculated reduction percentage from weekly summary
+        return lastWeekSummary.usageReductionPercentage
+    }
+    
     // MARK: - Goal Management
     
     func updateUsageGoal(dailyLimit: TimeInterval? = nil, 
@@ -420,6 +448,57 @@ class UsageTracker {
         let startDate = calendar.date(byAdding: .day, value: -days, to: today) ?? today
         
         return history.filter { $0.date >= startDate }
+    }
+    
+    /// Get usage statistics for a specific app
+    func getAppUsageStats(appName: String) -> AppUsageStats? {
+        // Create AppUsageStats instance
+        var stats = AppUsageStats(appName: appName)
+        
+        // Set today's usage time if available
+        if let todayUsage = currentDayUsage, let appStat = todayUsage.appStats[appName] {
+            stats.totalTimeToday = appStat.totalUsageTime
+            stats.sessionCount = appStat.launchCount
+        }
+        
+        // Set this week's usage time
+        let calendar = Calendar.current
+        let today = Date()
+        guard let currentWeekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)) else {
+            return stats
+        }
+        
+        // Get usage history for date range between current week start and today
+        let currentWeekUsage = getUsageHistoryForDateRange(start: currentWeekStart, end: today)
+        
+        // Calculate total app usage for this week
+        var thisWeekTotal: TimeInterval = 0
+        for day in currentWeekUsage {
+            if let appStat = day.appStats[appName] {
+                thisWeekTotal += appStat.totalUsageTime
+            }
+        }
+        stats.totalTimeThisWeek = thisWeekTotal
+        
+        // Set previous week's usage time if available
+        guard let previousWeekStart = calendar.date(byAdding: .weekOfYear, value: -1, to: currentWeekStart),
+              let previousWeekEnd = calendar.date(byAdding: .day, value: 6, to: previousWeekStart) else {
+            return stats
+        }
+        
+        // Get usage history for previous week
+        let previousWeekUsage = getUsageHistoryForDateRange(start: previousWeekStart, end: previousWeekEnd)
+        
+        // Calculate total app usage for previous week
+        var previousWeekTotal: TimeInterval = 0
+        for day in previousWeekUsage {
+            if let appStat = day.appStats[appName] {
+                previousWeekTotal += appStat.totalUsageTime
+            }
+        }
+        stats.totalTimePreviousWeek = previousWeekTotal
+        
+        return stats
     }
     
     /// Check if user has exceeded daily limit

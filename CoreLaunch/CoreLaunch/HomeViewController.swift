@@ -7,9 +7,6 @@
 
 import UIKit
 
-// No need to import CoreLaunch as we're already in the module
-// Import the BreathingRoom types through extension
-
 class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDelegate {
     static var appCache: [String: AppItem] = [:]
     
@@ -23,6 +20,7 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
     private let settingsButton = UIButton(type: .system)
     private let usageStatsButton = UIButton(type: .system)
     private let focusModeButton = UIButton(type: .system)
+    internal let achievementsButton = UIButton(type: .system)
     
     // Focus mode
     private let focusManager = FocusModeManager.shared
@@ -48,6 +46,7 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         loadApps()
         startTimeUpdates()
         checkForPendingAppSessions()
+        setupAchievementsButton()
         
         // Register for application activation notifications
         NotificationCenter.default.addObserver(
@@ -86,6 +85,9 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         
         // Always check for pending sessions when returning to the app
         checkForPendingAppSessions()
+        
+        // Update achievement notification badge
+        updateAchievementNotification()
     }
     
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -585,9 +587,9 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         
         let finishedAction = UIAlertAction(title: "Yes, I'm Done", style: .default) { _ in
             // Record app closing in usage statistics
-            if UsageTracker.shared.recordAppClosed(appName: appName) {
-                // Generate weekly summary periodically
-                UsageTracker.shared.generateWeeklySummary()
+            if UsageTracker.shared.recordAppClosedWithReinforcement(appName: appName) {
+            // Check for achievements after usage
+            self.checkAchievementsAfterAppUsage(appName: appName)
             }
         }
         
@@ -674,6 +676,31 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         // In a real app, you would use URL schemes to launch apps
         // For example: UIApplication.shared.open(URL(string: "messages://")!)
     }
+    
+    // MARK: - Achievements
+    
+    private func checkAchievementsAfterAppUsage(appName: String) {
+        // Get usage statistics for this app
+        if let appUsage = UsageTracker.shared.getAppUsageStats(appName: appName) {
+            // Check if user stayed under their daily limit
+            let dailyLimit = UserDefaults.standard.double(forKey: "dailyScreenTimeLimit")
+            if dailyLimit > 0 {
+                AchievementManager.shared.checkDailyGoalAchievements(usageTime: appUsage.totalTimeToday, limit: dailyLimit)
+            }
+            
+            // Check for weekly reduction achievements
+            let weeklyReductionTarget = UserDefaults.standard.double(forKey: "weeklyReductionTarget")
+            if weeklyReductionTarget > 0 {
+                let currentReduction = UsageTracker.shared.calculateWeeklyReduction()
+                AchievementManager.shared.checkWeeklyReductionAchievements(currentReduction: currentReduction, target: weeklyReductionTarget)
+            }
+            
+            // Update UI to reflect any new achievements
+            updateAchievementNotification()
+        }
+    }
+    
+
     
     // MARK: - BreathingRoomDelegate
     

@@ -744,8 +744,8 @@ class FocusModeViewController: UIViewController {
         let state = focusManager.getCurrentState()
         
         if state == .active {
-            // End active focus session
-            focusManager.endFocusSession(completed: false)
+            // End active focus session with achievement check
+            focusManager.endFocusSessionWithAchievement(completed: false)
         } else if state == .scheduled {
             // Cancel scheduled session
             focusManager.cancelScheduledFocusSession()
