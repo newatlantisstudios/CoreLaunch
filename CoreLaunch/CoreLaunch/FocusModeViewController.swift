@@ -63,6 +63,15 @@ class FocusModeViewController: UIViewController {
     
     // MARK: - Setup
     private func setupUI() {
+        
+        // Add dismiss button to navigation bar
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            image: UIImage(systemName: "xmark"),
+            style: .plain,
+            target: self,
+            action: #selector(dismissViewController)
+        )
+
         // Status view
         setupStatusView()
         
@@ -301,6 +310,14 @@ class FocusModeViewController: UIViewController {
     }
     
     // MARK: - UI Updates
+    
+    @objc private func dismissViewController() {
+        if let navigationController = navigationController, navigationController.viewControllers.first != self {
+            navigationController.popViewController(animated: true)
+        } else {
+            dismiss(animated: true, completion: nil)
+        }
+    }
     
     private func updateUI() {
         let state = focusManager.getCurrentState()

@@ -473,15 +473,18 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         // Create and present the settings view
         let settingsVC = SettingsViewController()
         settingsVC.delegate = self
-        settingsVC.modalPresentationStyle = .pageSheet
-        settingsVC.modalTransitionStyle = .coverVertical
+        
+        // Create a navigation controller to wrap settings VC
+        let navController = UINavigationController(rootViewController: settingsVC)
+        navController.modalPresentationStyle = .pageSheet
+        navController.modalTransitionStyle = .coverVertical
         
         // On larger devices (iPad), we can use form sheet for a better experience
         if UIDevice.current.userInterfaceIdiom == .pad {
-            settingsVC.modalPresentationStyle = .formSheet
+            navController.modalPresentationStyle = .formSheet
         }
         
-        present(settingsVC, animated: true)
+        present(navController, animated: true)
     }
     
     @objc private func usageStatsButtonTapped() {

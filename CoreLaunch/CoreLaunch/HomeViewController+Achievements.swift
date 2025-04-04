@@ -37,9 +37,6 @@ extension HomeViewController {
         
         // Check for new achievements and update UI if needed
         UsageTracker.shared.showAchievementNotificationIfNeeded(button: achievementsButton)
-        
-        // Setup debug feature
-        setupDebugFeature()
     }
     
     func updateAchievementNotification() {
@@ -52,35 +49,6 @@ extension HomeViewController {
         present(navController, animated: true)
     }
     
-    // Debug feature - long press on achievements button to access debug menu
-    func setupDebugFeature() {
-        // Add long press gesture to achievements button for accessing debug mode
-        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(showDebugOptions(_:)))
-        longPress.minimumPressDuration = 2.0 // 2 seconds long press
-        achievementsButton.addGestureRecognizer(longPress)
-    }
-    
-    @objc func showDebugOptions(_ gesture: UILongPressGestureRecognizer) {
-        // Only trigger once when the long press begins
-        if gesture.state == .began {
-            // Show debug options
-            let alert = UIAlertController(
-                title: "Debug Options",
-                message: "Select a debug option",
-                preferredStyle: .actionSheet
-            )
-            
-            alert.addAction(UIAlertAction(title: "Debug Achievements", style: .default) { [weak self] _ in
-                let debugVC = DebugAchievementsViewController()
-                let navController = UINavigationController(rootViewController: debugVC)
-                self?.present(navController, animated: true)
-            })
-            
-            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-            
-            present(alert, animated: true)
-        }
-    }
     
     func checkAchievementsAfterAppUsage() {
         UsageTracker.shared.checkDailyGoalAchievements()
