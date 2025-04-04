@@ -73,7 +73,6 @@ class SettingsViewController: UIViewController {
     private var allApps: [AppItem] = []
     
     // MARK: - UI Elements
-    private let closeButton = UIButton(type: .system)
     
     // MARK: - Lifecycle
     override func viewDidLoad() {
@@ -83,6 +82,18 @@ class SettingsViewController: UIViewController {
         setupUI()
         configureTableView()
     }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        print("DEBUG: SettingsViewController viewWillDisappear - ensuring color persistence")
+        
+        // Force save app selections to UserDefaults as we leave
+        saveAppSelectionsToUserDefaults()
+        
+        // Explicitly notify delegate to update colors
+        delegate?.didUpdateAppSelections(allApps)
+    }
+    
     
     // MARK: - Theme Selection
     
@@ -1213,9 +1224,7 @@ class SettingsViewController: UIViewController {
         view.backgroundColor = .systemBackground
         
         // Close button
-        closeButton.setTitle("Done", for: .normal)
-        closeButton.addTarget(self, action: #selector(closeButtonTapped), for: .touchUpInside)
-        navigationItem.rightBarButtonItem = UIBarButtonItem(customView: closeButton)
+        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(closeButtonTapped))
         
         // Add button for adding new apps (if needed)
         let addButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addAppButtonTapped))
@@ -1237,16 +1246,42 @@ class SettingsViewController: UIViewController {
         tableView.delegate = self
         tableView.dataSource = self
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "SettingsCell")
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "SettingsDetailCell")
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "SettingsSubtitleCell")
+        // Register a value1 style cell for the app items (right-aligned detail text)
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "SettingsValueCell")
         tableView.isEditing = false // Will be toggled to true for the apps section
     }
     
     // MARK: - Actions
     @objc private func closeButtonTapped() {
+        // Save settings before dismissing
         saveSettings()
+        
+        // Force save app selections to ensure they're available immediately
+        saveAppSelectionsToUserDefaults()
+        
+        // Notify delegate to update all settings
         delegate?.didUpdateSettings()
         delegate?.didUpdateTheme()
-        dismiss(animated: true)
+        delegate?.didUpdateAppSelections(allApps)
+        
+        // Take snapshot to freeze the current view during transition
+        if let parentView = presentingViewController?.view {
+            let snapshot = parentView.snapshotView(afterScreenUpdates: true)
+            if let snapshot = snapshot {
+                snapshot.frame = parentView.frame
+                parentView.addSubview(snapshot)
+                
+                // Dismiss with completion to remove snapshot
+                dismiss(animated: true) {
+                    snapshot.removeFromSuperview()
+                }
+            } else {
+                dismiss(animated: true)
+            }
+        } else {
+            dismiss(animated: true)
+        }
     }
     
     private func showAddProfileDialog() {
@@ -1345,7 +1380,7 @@ class SettingsViewController: UIViewController {
 }
 
 // MARK: - TableView DataSource & Delegate
-extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
+extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UIColorPickerViewControllerDelegate {
     
     func numberOfSections(in tableView: UITableView) -> Int {
         return 9
@@ -1650,38 +1685,50 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             
         case 8: // App selection
             if indexPath.row < allApps.count {
+                // Reuse the cell already dequeued at the beginning of this method
+                // We don't need to dequeue it again
                 let app = allApps[indexPath.row]
                 cell.textLabel?.text = app.name
                 
-                // Create a simple colored dot for the app icon
-                let iconSize: CGFloat = 24
-                let iconView = UIView(frame: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
-                iconView.backgroundColor = app.getIconColor(useMonochrome: useMonochromeIcons, isDarkMode: traitCollection.userInterfaceStyle == .dark)
-                iconView.layer.cornerRadius = iconSize / 2
-                iconView.clipsToBounds = true
-                
-                // Create a container view to hold our icon
-                let containerView = UIView(frame: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
-                containerView.addSubview(iconView)
-                
-                // Set the container as the accessory view
-                let iconContainerView = UIView(frame: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
-                iconContainerView.addSubview(containerView)
-                
-                // Clear any existing accessoryView
+                // Use disclosure indicator instead of switch
                 cell.accessoryView = nil
+                cell.accessoryType = .disclosureIndicator
                 
-                // Set the icon image
-                let imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
-                imageView.image = UIImage(systemName: "app.fill")
-                imageView.tintColor = app.getIconColor(useMonochrome: useMonochromeIcons, isDarkMode: traitCollection.userInterfaceStyle == .dark)
-                cell.imageView?.image = imageView.image
+                // Create a custom app icon that matches the home screen
+                let iconSize: CGFloat = 12
+                let circleView = UIView(frame: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
+                circleView.backgroundColor = app.getIconColor(useMonochrome: useMonochromeIcons, isDarkMode: traitCollection.userInterfaceStyle == .dark)
+                circleView.layer.cornerRadius = iconSize / 2
+                circleView.clipsToBounds = true
                 
-                // Set switch for app selection
-                switchView.isOn = app.isSelected
-                switchView.tag = 1000 + indexPath.row // Use tag 1000+ for app switches
-                switchView.addTarget(self, action: #selector(appSwitchChanged(_:)), for: .valueChanged)
-                cell.accessoryView = switchView
+                // Add the circle to a custom view that we'll place in the cell
+                let containerView = UIView(frame: CGRect(x: 0, y: 0, width: 20, height: 20))
+                containerView.backgroundColor = .clear
+                circleView.translatesAutoresizingMaskIntoConstraints = false
+                containerView.addSubview(circleView)
+                
+                // Center the circle in its container
+                NSLayoutConstraint.activate([
+                    circleView.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+                    circleView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+                    circleView.widthAnchor.constraint(equalToConstant: iconSize),
+                    circleView.heightAnchor.constraint(equalToConstant: iconSize)
+                ])
+                
+                // Create an image from the container view
+                UIGraphicsBeginImageContextWithOptions(containerView.bounds.size, false, 0)
+                if let context = UIGraphicsGetCurrentContext() {
+                    containerView.layer.render(in: context)
+                    let image = UIGraphicsGetImageFromCurrentImageContext()
+                    UIGraphicsEndImageContext()
+                    
+                    // Set the image to the cell's imageView
+                    cell.imageView?.image = image
+                }
+                
+                cell.selectionStyle = .default // Enable selection for tapping the row
+                
+                return cell
             }
         default:
             break
@@ -1728,12 +1775,77 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         }
     }
     
+    // Show app options menu with toggle and color picker
+    private func showAppOptionsMenu(for appIndex: Int, at indexPath: IndexPath) {
+        let app = allApps[appIndex]
+        
+        // Create an action sheet
+        let actionSheet = UIAlertController(
+            title: app.name,
+            message: "Manage app settings",
+            preferredStyle: .actionSheet
+        )
+        
+        // Add option to change color
+        let changeColorAction = UIAlertAction(title: "Change Color", style: .default) { [weak self] _ in
+            self?.showAppColorPicker(for: appIndex)
+        }
+        
+        // Add toggle option
+        let toggleTitle = app.isSelected ? "Disable App" : "Enable App"
+        let toggleAction = UIAlertAction(title: toggleTitle, style: .default) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Toggle selection
+            self.allApps[appIndex].isSelected = !app.isSelected
+            
+            // Save to UserDefaults
+            self.saveAppSelectionsToUserDefaults()
+            
+            // Update the table cell
+            self.tableView.reloadRows(at: [indexPath], with: .automatic)
+            
+            // Notify delegate
+            self.delegate?.didUpdateAppSelections(self.allApps)
+        }
+        
+        // Add cancel action
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
+        
+        // Add actions to the sheet
+        actionSheet.addAction(changeColorAction)
+        actionSheet.addAction(toggleAction)
+        actionSheet.addAction(cancelAction)
+        
+        // Present the action sheet
+        present(actionSheet, animated: true)
+    }
+    
+    private func showAppColorPicker(for appIndex: Int) {
+        let colorPickerVC = UIColorPickerViewController()
+        colorPickerVC.selectedColor = allApps[appIndex].color
+        colorPickerVC.delegate = self
+        colorPickerVC.title = "Choose color for \(allApps[appIndex].name)"
+        
+        // Use a property to keep track of which app we're changing
+        colorPickerVC.view.tag = appIndex
+        
+        present(colorPickerVC, animated: true)
+    }
+    
     private func saveAppSelectionsToUserDefaults() {
         // Save updated app selections to UserDefaults
         do {
             let encoder = JSONEncoder()
             let data = try encoder.encode(allApps)
             UserDefaults.standard.set(data, forKey: "savedApps")
+            UserDefaults.standard.synchronize() // Force immediate save
+            
+            // Debug: print what was saved
+            print("DEBUG: Saved \(allApps.count) apps to UserDefaults")
+            for app in allApps {
+                print("DEBUG: Saved app \(app.name) with color \(app.color)")
+            }
         } catch {
             print("Failed to save app selections: \(error)")
         }
@@ -1797,6 +1909,52 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         present(alert, animated: true)
     }
     
+    // MARK: - UIColorPickerViewControllerDelegate
+    
+    func colorPickerViewControllerDidFinish(_ viewController: UIColorPickerViewController) {
+        let appIndex = viewController.view.tag
+        if appIndex >= 0 && appIndex < allApps.count {
+            print("DEBUG: Color picker finished for app \(allApps[appIndex].name)")
+            
+            // Update the app's color
+            let newColor = viewController.selectedColor
+            print("DEBUG: Changing color for \(allApps[appIndex].name) to \(newColor)")
+            allApps[appIndex].color = newColor
+            
+            // Save to UserDefaults immediately to ensure persistence
+            saveAppSelectionsToUserDefaults()
+            
+            // Reload the table view
+            tableView.reloadData()
+            
+            // Make sure the delegate gets the updated apps
+            print("DEBUG: Calling delegate methods")
+            delegate?.didUpdateSettings()
+            delegate?.didUpdateTheme()
+            delegate?.didUpdateAppSelections(allApps)
+        }
+    }
+    
+    func colorPickerViewControllerDidSelectColor(_ viewController: UIColorPickerViewController) {
+        // Real-time color updates for preview
+        let appIndex = viewController.view.tag
+        if appIndex >= 0 && appIndex < allApps.count {
+            // Preview the color change
+            allApps[appIndex].color = viewController.selectedColor
+            
+            // Save changes immediately to UserDefaults for persistence
+            saveAppSelectionsToUserDefaults()
+            
+            // Update both the settings view and home screen
+            tableView.reloadData()
+            
+            // Call all delegate methods to ensure complete refresh
+            delegate?.didUpdateSettings()
+            delegate?.didUpdateTheme()
+            delegate?.didUpdateAppSelections(allApps)
+        }
+    }
+    
     // MARK: - Table View Editing Support
     
     func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
@@ -1824,6 +1982,14 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
         // Only allow moving in the apps section
         return indexPath.section == 8
+    }
+    
+    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        // Match the row height of the home screen for app cells
+        if indexPath.section == 8 {
+            return 60
+        }
+        return UITableView.automaticDimension
     }
     
     func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
@@ -1884,6 +2050,12 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             present(navController, animated: true)
         default:
             break
+        }
+    } else if indexPath.section == 8 {
+        // Handle app selection when tapping on an app row
+        if indexPath.row < allApps.count {
+        // Show options for this app
+        showAppOptionsMenu(for: indexPath.row, at: indexPath)
         }
     }
         tableView.deselectRow(at: indexPath, animated: true)

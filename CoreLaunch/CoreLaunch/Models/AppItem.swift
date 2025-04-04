@@ -32,6 +32,8 @@ struct AppItem: Codable {
         // Store color name as a string
         let colorName = getColorName(for: color)
         try container.encode(colorName, forKey: .colorName)
+        
+        print("DEBUG: Encoding app \(name) with colorName \(colorName)")
     }
     
     init(from decoder: Decoder) throws {
@@ -41,14 +43,20 @@ struct AppItem: Codable {
         
         // Decode color from name
         let colorName = try container.decode(String.self, forKey: .colorName)
+        print("DEBUG: Decoding app \(name) with colorName \(colorName)")
+        
         // Initialize color first before using self in getColor
         color = UIColor.systemGray
         // Then update it with the correct color
         color = getColor(from: colorName)
+        print("DEBUG: App \(name) color set to \(color)")
     }
     
     // Color name to UIColor conversion
     private func getColor(from name: String) -> UIColor {
+        print("DEBUG: Getting color for name: \(name)")
+        
+        // Handle standard system colors
         switch name {
         case "systemBlue": return .systemBlue
         case "systemGreen": return .systemGreen
@@ -58,8 +66,25 @@ struct AppItem: Codable {
         case "systemRed": return .systemRed
         case "systemPurple": return .systemPurple
         case "systemGray": return .systemGray
-        default: return .systemGray
+        default: break
         }
+        
+        // Check if it's a custom color
+        if name.hasPrefix("custom_") {
+            print("DEBUG: Detected custom color name")
+            // Parse RGB values from the name
+            let components = name.dropFirst("custom_".count).split(separator: "_")
+            if components.count >= 3,
+               let red = Double(components[0]),
+               let green = Double(components[1]),
+               let blue = Double(components[2]) {
+                print("DEBUG: Creating color with RGB: \(red), \(green), \(blue)")
+                return UIColor(red: CGFloat(red), green: CGFloat(green), blue: CGFloat(blue), alpha: 1.0)
+            }
+        }
+        
+        print("DEBUG: Unknown color name: \(name), defaulting to systemGray")
+        return .systemGray
     }
     
     private func getColorName(for color: UIColor) -> String {
@@ -71,6 +96,22 @@ struct AppItem: Codable {
         if color == .systemRed { return "systemRed" }
         if color == .systemPurple { return "systemPurple" }
         if color == .systemGray { return "systemGray" }
+        
+        // Debug for custom colors
+        print("DEBUG: Custom color detected - not matching any standard colors")
+        
+        // Store RGB values for custom colors
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        
+        if color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+            let colorString = "custom_\(red)_\(green)_\(blue)"
+            print("DEBUG: Creating custom color name: \(colorString)")
+            return colorString
+        }
+        
         return "systemGray"
     }
     

@@ -31,6 +31,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
 
+    // MARK: - Custom Transition Coordinator
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         // Use this method to optionally configure and attach the UIWindow `window` to the provided UIWindowScene `scene`.
         // If using a storyboard, the `window` property will automatically be initialized and attached to the scene.
@@ -49,6 +50,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let navigationController = UINavigationController(rootViewController: homeViewController)
         navigationController.isNavigationBarHidden = true
         window?.rootViewController = navigationController
+        
+        // Register for transition events
+        if let rootVC = window?.rootViewController {
+            rootVC.transitionCoordinator?.animate(alongsideTransition: { context in
+                // Ensure UserDefaults is synchronized during transitions
+                UserDefaults.standard.synchronize()
+            }, completion: { _ in })
+        }
         
         // Apply the current theme to the window
         let isDarkMode = windowScene.traitCollection.userInterfaceStyle == .dark
@@ -133,6 +142,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneWillEnterForeground(_ scene: UIScene) {
         // Called as the scene transitions from the background to the foreground.
         // Use this method to undo the changes made on entering the background.
+        print("SceneDelegate sceneWillEnterForeground")
+        
+        // Force UserDefaults synchronization during transition
+        UserDefaults.standard.synchronize()
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {

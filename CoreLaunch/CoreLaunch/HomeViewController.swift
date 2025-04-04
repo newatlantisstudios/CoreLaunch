@@ -70,7 +70,15 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        print("HomeViewController viewWillAppear - checking for sessions")
+        print("DEBUG: HomeViewController viewWillAppear called")
+        
+        // Force reload colors from UserDefaults every time
+        // Use a slight delay to ensure the transition animation doesn't interfere
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            print("DEBUG: Delayed reload of apps data from UserDefaults")
+            self.loadAppsFromUserDefaults(forceRefresh: true)
+            self.tableView.reloadData()
+        }
         
         // Explicitly apply theme background
         view.backgroundColor = ThemeManager.shared.currentTheme.backgroundColor
@@ -325,22 +333,15 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         ]
         
         // Check if we have saved apps data
-        if let savedApps = loadAppsFromUserDefaults() {
-            allApps = savedApps
+        let hasAppData = UserDefaults.standard.data(forKey: "savedApps") != nil
+        
+        if hasAppData {
+            // Load apps from UserDefaults
+            loadAppsFromUserDefaults()
         } else {
             allApps = defaultApps
             saveAppsToUserDefaults()
         }
-        
-        // Filter for display
-        updateDisplayedApps()
-        
-        // Populate the static app cache for use in dark/light mode transitions
-        for app in allApps {
-            HomeViewController.appCache[app.name] = app
-        }
-        
-        tableView.reloadData()
     }
     
     private func updateDisplayedApps() {
@@ -349,26 +350,54 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
     }
     
     private func saveAppsToUserDefaults() {
+        // Log before saving
+        print("DEBUG: Saving \(allApps.count) apps to UserDefaults")
+        for app in allApps {
+            print("DEBUG: Saving app \(app.name) with color \(app.color)")
+        }
+        
         do {
             let encoder = JSONEncoder()
             let data = try encoder.encode(allApps)
             UserDefaults.standard.set(data, forKey: "savedApps")
+            UserDefaults.standard.synchronize() // Force immediate write
+            print("DEBUG: Successfully saved apps to UserDefaults and synchronized")
         } catch {
             print("Failed to save apps: \(error)")
         }
     }
     
-    private func loadAppsFromUserDefaults() -> [AppItem]? {
+    private func loadAppsFromUserDefaults(forceRefresh: Bool = false) {
+        print("DEBUG: Loading apps from UserDefaults with forceRefresh: \(forceRefresh)")
+        
+        // Clear cached data if forcing refresh
+        if forceRefresh {
+            HomeViewController.appCache.removeAll()
+        }
+        
         guard let data = UserDefaults.standard.data(forKey: "savedApps") else {
-            return nil
+            print("DEBUG: No app data found in UserDefaults")
+            return
         }
         
         do {
             let decoder = JSONDecoder()
-            return try decoder.decode([AppItem].self, from: data)
+            allApps = try decoder.decode([AppItem].self, from: data)
+            print("DEBUG: Successfully loaded \(allApps.count) apps from UserDefaults")
+            
+            // Update cache
+            for app in allApps {
+                HomeViewController.appCache[app.name] = app
+                print("DEBUG: Updated cache for app \(app.name) with color \(app.color)")
+            }
+            
+            // Filter for display
+            updateDisplayedApps()
+            
+            // Force refresh table view
+            tableView.reloadData()
         } catch {
             print("Failed to load apps: \(error)")
-            return nil
         }
     }
     
@@ -441,10 +470,18 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
     }
     
     @objc private func settingsButtonTapped() {
+        // Create and present the settings view
         let settingsVC = SettingsViewController()
         settingsVC.delegate = self
-        let navController = UINavigationController(rootViewController: settingsVC)
-        present(navController, animated: true)
+        settingsVC.modalPresentationStyle = .pageSheet
+        settingsVC.modalTransitionStyle = .coverVertical
+        
+        // On larger devices (iPad), we can use form sheet for a better experience
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            settingsVC.modalPresentationStyle = .formSheet
+        }
+        
+        present(settingsVC, animated: true)
     }
     
     @objc private func usageStatsButtonTapped() {
@@ -617,14 +654,39 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
     }
     
     func didUpdateAppSelections(_ updatedApps: [AppItem]) {
+        print("DEBUG: didUpdateAppSelections called with \(updatedApps.count) apps")
+        
+        // Make sure each app's color is reflected in the log
+        for app in updatedApps {
+            print("DEBUG: Updated app \(app.name) with color \(app.color)")
+        }
+        
+        // Update local apps array
         allApps = updatedApps
+        
+        // Force save to UserDefaults
         saveAppsToUserDefaults()
+        
+        // Update filter
         updateDisplayedApps()
+        
+        // Update app cache for future reference
+        for app in updatedApps {
+            HomeViewController.appCache[app.name] = app
+            print("DEBUG: Updated app cache for \(app.name)")
+        }
         
         // Animate table view updates for a better user experience
         UIView.transition(with: tableView, duration: 0.3, options: .transitionCrossDissolve, animations: {
+            print("DEBUG: Reloading tableView in didUpdateAppSelections")
             self.tableView.reloadData()
-        }, completion: nil)
+        }, completion: { _ in
+            // Force a second refresh to ensure all cells have the latest colors
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                print("DEBUG: Performing secondary reload of tableView")
+                self.tableView.reloadData()
+            }
+        })
     }
     
     // MARK: - Focus Mode
@@ -853,7 +915,16 @@ class AppCell: UITableViewCell {
         nameLabel.text = app.name
         
         // Debug print
-        print("AppCell configure - App: \(app.name), current theme: \(ThemeManager.shared.currentTheme.name)")
+        print("DEBUG: AppCell configuring app: \(app.name) with color: \(app.color)")
+        
+        // Always double-check the app cache for the latest color
+        let appColor: UIColor
+        if let cachedApp = HomeViewController.appCache[app.name] {
+            appColor = cachedApp.color
+            print("DEBUG: Using cached color for \(app.name): \(appColor)")
+        } else {
+            appColor = app.color
+        }
         
         // Check UserDefaults for settings
         let useMinimalistStyle = UserDefaults.standard.bool(forKey: "useMinimalistStyle")
@@ -867,12 +938,13 @@ class AppCell: UITableViewCell {
         let fontSize = CGFloat(17) * CGFloat(fontSizeMultiplier)
         
         // Apply icon color based on settings
-        if useMonochromeIcons {
-            colorIndicator.backgroundColor = isDarkMode ? .white : .black
-        } else {
-            // Use the app's color
-            colorIndicator.backgroundColor = app.color
-        }
+        let iconColor = useMonochromeIcons ? (isDarkMode ? UIColor.white : UIColor.black) : appColor
+        print("DEBUG: Setting colorIndicator color to: \(iconColor)")
+        
+        // Use a slight animation for color change to avoid flicker
+        UIView.transition(with: colorIndicator, duration: 0.05, options: .transitionCrossDissolve, animations: {
+            self.colorIndicator.backgroundColor = iconColor
+        }, completion: nil)
         
         // Get the current theme and explicitly apply colors
         let theme = ThemeManager.shared.currentTheme
