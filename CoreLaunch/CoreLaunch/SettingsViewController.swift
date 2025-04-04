@@ -1274,7 +1274,7 @@ class SettingsViewController: UIViewController {
 extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     
     func numberOfSections(in tableView: UITableView) -> Int {
-        return 7
+        return 8
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -1292,6 +1292,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         case 5:
             return 3 // Theme settings (Select theme, Custom theme, Create new theme)
         case 6:
+            return 2 // Focus & Mindfulness (Focus Mode and Breathing Room)
+        case 7:
             return allApps.count // App selection
         default:
             return 0
@@ -1313,6 +1315,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         case 5:
             return "Theme Settings"
         case 6:
+            return "Focus & Mindfulness"
+        case 7:
             return "Home Screen Apps"
         default:
             return nil
@@ -1320,7 +1324,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     }
     
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
-        if section == 6 {
+        if section == 7 {
             // Create a header with a button to toggle edit mode
             let headerView = UIView(frame: CGRect(x: 0, y: 0, width: tableView.frame.width, height: 40))
             
@@ -1363,6 +1367,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         case 5:
             return "Choose a color theme or create your own custom theme."
         case 6:
+            return "Tools to help you stay focused and mindful when using your apps."
+        case 7:
             return "Toggle which apps appear on your home screen."
         default:
             return nil
@@ -1489,7 +1495,26 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
                 break
             }
             
-        case 6: // App selection
+        case 6: // Focus & Mindfulness
+            cell.accessoryType = .disclosureIndicator
+            cell.accessoryView = nil // Remove switch view
+            
+            switch indexPath.row {
+            case 0: // Focus Mode
+                cell.textLabel?.text = "Focus Mode"
+                // Add a small icon
+                cell.imageView?.image = UIImage(systemName: "timer")
+                cell.imageView?.tintColor = .systemBlue
+            case 1: // Breathing Room
+                cell.textLabel?.text = "Breathing Room"
+                // Add a small icon
+                cell.imageView?.image = UIImage(systemName: "lungs")
+                cell.imageView?.tintColor = .systemIndigo
+            default:
+                break
+            }
+            
+        case 7: // App selection
             if indexPath.row < allApps.count {
                 let app = allApps[indexPath.row]
                 cell.textLabel?.text = app.name
@@ -1642,12 +1667,12 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     
     func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
         // Only allow editing in the apps section
-        return indexPath.section == 6
+        return indexPath.section == 7
     }
     
     func tableView(_ tableView: UITableView, editingStyleForRowAt indexPath: IndexPath) -> UITableViewCell.EditingStyle {
         // During reordering mode, don't show delete buttons
-        if indexPath.section == 6 && tableView.isEditing {
+        if indexPath.section == 7 && tableView.isEditing {
             return .none
         }
         return .delete
@@ -1655,12 +1680,12 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     
     func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
         // Only allow moving in the apps section
-        return indexPath.section == 6
+        return indexPath.section == 7
     }
     
     func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
         // Ensure we're only moving within the apps section
-        guard sourceIndexPath.section == 6 && destinationIndexPath.section == 6 else { return }
+        guard sourceIndexPath.section == 7 && destinationIndexPath.section == 7 else { return }
         
         // Update the app order in our data model
         let movedApp = allApps.remove(at: sourceIndexPath.row)
@@ -1685,6 +1710,19 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
                 showCustomThemesMenu()
             case 2: // Create new theme
                 showCreateThemeMenu()
+            default:
+                break
+            }
+        } else if indexPath.section == 6 {
+            switch indexPath.row {
+            case 0: // Focus Mode
+                let focusModeVC = FocusModeViewController()
+                let navController = UINavigationController(rootViewController: focusModeVC)
+                present(navController, animated: true)
+            case 1: // Breathing Room
+                let breathingRoomVC = BreathingRoomSettingsViewController()
+                let navController = UINavigationController(rootViewController: breathingRoomVC)
+                present(navController, animated: true)
             default:
                 break
             }
@@ -1843,7 +1881,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     }
     
     func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if indexPath.section == 6 && editingStyle == .delete {
+        if indexPath.section == 7 && editingStyle == .delete {
             // Prevent deleting all apps - maintain at least one app
             if allApps.count <= 1 {
                 let alert = UIAlertController(

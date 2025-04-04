@@ -8,8 +8,9 @@
 import UIKit
 
 // No need to import CoreLaunch as we're already in the module
+// Import the BreathingRoom types through extension
 
-class HomeViewController: UIViewController, SettingsDelegate {
+class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDelegate {
     static var appCache: [String: AppItem] = [:]
     
     // MARK: - Properties
@@ -529,17 +530,16 @@ class HomeViewController: UIViewController, SettingsDelegate {
         )
         
         let launchAction = UIAlertAction(title: "Open", style: .default) { [weak self] _ in
-            // Record app launch in usage statistics
-            _ = UsageTracker.shared.recordAppLaunch(appName: app.name)
+            guard let self = self else { return }
             
-            // Log the launch
-            print("Would launch: \(app.name)")
-            
-            // Show a reminder to return to CoreLaunch
-            self?.showReturnReminder(for: app)
-            
-            // In a real app, you would use URL schemes to launch apps
-            // For example: UIApplication.shared.open(URL(string: "messages://")!)
+            // Check if this app should have breathing room delay
+            if BreathingRoomManager.shared.shouldDelayApp(app.name) {
+                let delayDuration = BreathingRoomManager.shared.getDelayDuration(for: app.name)
+                self.showBreathingRoom(for: app, duration: delayDuration)
+            } else {
+                // Launch app immediately without breathing room
+                self.launchApp(app)
+            }
         }
         
         let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
@@ -650,6 +650,44 @@ class HomeViewController: UIViewController, SettingsDelegate {
         alert.addAction(cancelAction)
         
         present(alert, animated: true)
+    }
+    
+    // MARK: - Breathing Room Methods
+    
+    private func showBreathingRoom(for app: AppItem, duration: TimeInterval) {
+        let breathingVC = BreathingRoomViewController(appName: app.name, delayDuration: duration)
+        breathingVC.delegate = self
+        present(breathingVC, animated: true)
+    }
+    
+    // Launch the app after any delays or confirmations
+    private func launchApp(_ app: AppItem) {
+        // Record app launch in usage statistics
+        _ = UsageTracker.shared.recordAppLaunch(appName: app.name)
+        
+        // Log the launch
+        print("Would launch: \(app.name)")
+        
+        // Show a reminder to return to CoreLaunch
+        self.showReturnReminder(for: app)
+        
+        // In a real app, you would use URL schemes to launch apps
+        // For example: UIApplication.shared.open(URL(string: "messages://")!)
+    }
+    
+    // MARK: - BreathingRoomDelegate
+    
+    func breathingRoomDidComplete(for appName: String) {
+        // Find the app item by name
+        if let app = allApps.first(where: { $0.name == appName }) {
+            // Launch the app
+            launchApp(app)
+        }
+    }
+    
+    func breathingRoomWasCancelled(for appName: String) {
+        // User cancelled, don't launch the app
+        print("Breathing room cancelled for \(appName)")
     }
 }
 
