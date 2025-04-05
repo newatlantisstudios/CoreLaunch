@@ -1,0 +1,37 @@
+CoreLaunch Privacy Policy
+Last Updated: April 5, 2025
+Introduction
+Welcome to CoreLaunch, a mindful app launcher and digital wellbeing tool. At CoreLaunch, we are committed to protecting your privacy. This Privacy Policy explains our approach to user data and privacy.
+Please read this Privacy Policy carefully. By downloading, accessing, or using CoreLaunch, you agree to the terms and practices described in this Privacy Policy. If you do not agree with our policies and practices, please do not use our application.
+No Data Collection
+CoreLaunch is designed with complete privacy as a core value. We do not collect any personal information or data from your device. The app functions entirely with local processing on your device, with no data being transmitted to us or any third parties.
+How CoreLaunch Works Without Data Collection
+CoreLaunch functions without collecting or storing any user data:
+All app settings and preferences remain solely on your device
+App usage statistics are processed locally and are not stored or transmitted
+Focus session timers operate entirely within your device's memory
+No analytics or usage tracking occurs
+No user accounts are created or maintained
+Third-Party Services
+CoreLaunch functions as a standalone application and does not integrate with third-party services for data collection or processing. We do not:
+Use third-party analytics
+Incorporate advertising networks
+Integrate social media platforms
+Share data with external services
+The only interaction with external applications occurs when you choose to launch an app through CoreLaunch using standard iOS app URL schemes.
+Data Security
+Since CoreLaunch does not collect any information from you or your device:
+There is no risk of your data being compromised on our servers
+We do not have access to any information about your usage patterns
+We maintain no databases or records of user activity
+Your privacy is maintained by default
+Children's Privacy
+CoreLaunch is designed for users of all ages. Since we do not collect any personal information from any users, including children, there are no special provisions needed for children's privacy.
+Changes to Our Privacy Policy
+We may update our Privacy Policy from time to time. If we make material changes, we will provide a notice through the application before the changes take effect. Your continued use of CoreLaunch after we post changes to the Privacy Policy means you accept those changes.
+California Privacy Rights and International Data Transfers
+Since CoreLaunch does not collect, store, or transfer any personal information, the provisions of privacy laws such as the California Consumer Privacy Act (CCPA) and international data transfer regulations do not apply to our application.
+Contact Us
+If you have any questions or concerns about this Privacy Policy or our privacy practices, please contact us at:
+Email: admin@nevvatlantis.com
+Thank you for trusting CoreLaunch with your digital wellbeing journey.
