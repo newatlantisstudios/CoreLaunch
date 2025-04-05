@@ -21,6 +21,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             defaults.set(true, forKey: "showDate")
             defaults.set(true, forKey: "useMinimalistStyle")
             defaults.set(false, forKey: "useMonochromeIcons")
+            defaults.set(true, forKey: "showMotivationalMessages")
             defaults.set(true, forKey: "defaultsInitialized")
         }
         

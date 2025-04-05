@@ -95,13 +95,22 @@ struct SettingsProfile: Codable {
         defaults.set(textSizeMultiplier, forKey: "textSizeMultiplier")
         defaults.set(fontName, forKey: "fontName")
         
-        // Apply theme
-        if let theme = ThemeManager.shared.getAllThemes().first(where: { $0.name == themeName }) {
+        // Apply theme - first try to get the theme by name
+        if let theme = ThemeManager.shared.getTheme(named: themeName) {
+            print("Applying theme: \(theme.name) from settings profile: \(name)")
             ThemeManager.shared.currentTheme = theme
+        } else {
+            // If theme not found, use default theme
+            print("Theme \(themeName) not found in settings profile, using default")
+            ThemeManager.shared.currentTheme = ColorTheme.defaultTheme
         }
         
-        // Post notification that settings changed
+        // Force save settings
+        defaults.synchronize()
+        
+        // Post notifications that settings and theme changed
         NotificationCenter.default.post(name: NSNotification.Name("SettingsDidChangeNotification"), object: nil)
+        NotificationCenter.default.post(name: NSNotification.Name("ThemeDidChangeNotification"), object: nil)
     }
 }
 
@@ -141,9 +150,31 @@ class SettingsProfileManager {
     // Save all profiles
     func saveProfiles(_ profiles: [SettingsProfile]) {
         do {
+            // Update the active profile with current theme settings before saving
+            var updatedProfiles = profiles
+            if let activeProfileIndex = updatedProfiles.firstIndex(where: { $0.isActive }) {
+                // Ensure the active profile has the latest theme and settings
+                updatedProfiles[activeProfileIndex].themeName = ThemeManager.shared.currentTheme.name
+                
+                // Update other settings from UserDefaults
+                let defaults = UserDefaults.standard
+                updatedProfiles[activeProfileIndex].use24HourTime = defaults.bool(forKey: "use24HourTime")
+                updatedProfiles[activeProfileIndex].showDate = defaults.bool(forKey: "showDate")
+                updatedProfiles[activeProfileIndex].useMinimalistStyle = defaults.bool(forKey: "useMinimalistStyle")
+                updatedProfiles[activeProfileIndex].useMonochromeIcons = defaults.bool(forKey: "useMonochromeIcons")
+                updatedProfiles[activeProfileIndex].showMotivationalMessages = defaults.bool(forKey: "showMotivationalMessages")
+                updatedProfiles[activeProfileIndex].textSizeMultiplier = defaults.float(forKey: "textSizeMultiplier")
+                if let fontName = defaults.string(forKey: "fontName") {
+                    updatedProfiles[activeProfileIndex].fontName = fontName
+                }
+                
+                print("Saving active profile \(updatedProfiles[activeProfileIndex].name) with theme: \(updatedProfiles[activeProfileIndex].themeName)")
+            }
+            
             let encoder = JSONEncoder()
-            let data = try encoder.encode(profiles)
+            let data = try encoder.encode(updatedProfiles)
             UserDefaults.standard.set(data, forKey: profilesKey)
+            UserDefaults.standard.synchronize() // Ensure immediate save
         } catch {
             print("Failed to save profiles: \(error)")
         }
@@ -157,6 +188,7 @@ class SettingsProfileManager {
     // Set active profile
     func setActiveProfile(_ profile: SettingsProfile) {
         UserDefaults.standard.set(profile.name, forKey: activeProfileKey)
+        UserDefaults.standard.synchronize() // Ensure immediate save
         
         // Update active status in saved profiles
         var profiles = getAllProfiles()
@@ -165,8 +197,11 @@ class SettingsProfileManager {
         }
         saveProfiles(profiles)
         
-        // Apply the profile settings
+        // Apply the profile settings including the theme
         profile.apply()
+        
+        // Print debug info
+        print("Activated profile: \(profile.name) with theme: \(profile.themeName)")
     }
     
     // Save a new profile or update existing

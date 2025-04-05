@@ -296,10 +296,33 @@ class ThemeManager {
             return ColorTheme.defaultTheme
         }
         set {
+            // Check if we're setting the same theme (by name)
+            let currentThemeName = loadThemeNameFromUserDefaults()
+            let isNewTheme = currentThemeName != newValue.name
+            
+            // First save the theme completely to UserDefaults
             saveThemeToUserDefaults(newValue)
-            // Post notification that theme changed
+            
+            // Then also save just the name for easier retrieval
+            UserDefaults.standard.set(newValue.name, forKey: "selectedThemeName")
+            
+            // Save with profile name too if we know the active profile
+            if let activeProfileName = UserDefaults.standard.string(forKey: "activeProfileName") {
+                UserDefaults.standard.set(newValue.name, forKey: "selectedThemeName_\(activeProfileName)")
+            }
+            
+            UserDefaults.standard.synchronize()
+            
+            print("Set current theme to: \(newValue.name)")
+            
+            // Post notification that theme changed (even if name is the same - implementation might be different)
             NotificationCenter.default.post(name: NSNotification.Name("ThemeDidChangeNotification"), object: nil)
         }
+    }
+    
+    // Helper method to just get theme name from UserDefaults
+    private func loadThemeNameFromUserDefaults() -> String? {
+        return UserDefaults.standard.string(forKey: "selectedThemeName")
     }
     
     private init() {
@@ -322,23 +345,70 @@ class ThemeManager {
             let encoder = JSONEncoder()
             let data = try encoder.encode(theme)
             UserDefaults.standard.set(data, forKey: "selectedTheme")
+            UserDefaults.standard.synchronize() // Force immediate save
+            print("Saved theme to UserDefaults: \(theme.name)")
+            
+            // Also save the theme name separately for redundancy
+            UserDefaults.standard.set(theme.name, forKey: "selectedThemeName")
         } catch {
             print("Failed to save theme: \(error)")
         }
     }
     
     private func loadThemeFromUserDefaults() -> ColorTheme? {
-        guard let data = UserDefaults.standard.data(forKey: "selectedTheme") else {
-            return nil
+        let defaults = UserDefaults.standard
+        
+        // Check if we have an active profile first
+        if let activeProfileName = defaults.string(forKey: "activeProfileName") {
+            print("Finding theme for active profile: \(activeProfileName)")
+            
+            // First try to load profile-specific encoded theme data
+            if let data = defaults.data(forKey: "selectedTheme_\(activeProfileName)") {
+                do {
+                    let decoder = JSONDecoder()
+                    let decodedTheme = try decoder.decode(ColorTheme.self, from: data)
+                    print("Loaded profile-specific theme from UserDefaults data: \(decodedTheme.name)")
+                    return decodedTheme
+                } catch {
+                    print("Failed to decode profile-specific theme data: \(error)")
+                }
+            }
+            
+            // Then try profile-specific theme name
+            if let themeName = defaults.string(forKey: "selectedThemeName_\(activeProfileName)") {
+                print("Attempting to load profile-specific theme by name: \(themeName)")
+                if let theme = getTheme(named: themeName) {
+                    print("Found profile-specific theme by name: \(themeName)")
+                    saveThemeToUserDefaults(theme)
+                    return theme
+                }
+            }
         }
         
-        do {
-            let decoder = JSONDecoder()
-            return try decoder.decode(ColorTheme.self, from: data)
-        } catch {
-            print("Failed to load theme: \(error)")
-            return nil
+        // If no profile-specific theme found, try global theme data
+        if let data = defaults.data(forKey: "selectedTheme") {
+            do {
+                let decoder = JSONDecoder()
+                let decodedTheme = try decoder.decode(ColorTheme.self, from: data)
+                print("Loaded global theme from UserDefaults data: \(decodedTheme.name)")
+                return decodedTheme
+            } catch {
+                print("Failed to decode global theme data: \(error)")
+            }
         }
+        
+        // Finally, try to load by global name
+        if let themeName = defaults.string(forKey: "selectedThemeName") {
+            print("Attempting to load global theme by name: \(themeName)")
+            if let theme = getTheme(named: themeName) {
+                print("Found global theme by name: \(themeName)")
+                saveThemeToUserDefaults(theme)
+                return theme
+            }
+        }
+        
+        print("Could not load theme from UserDefaults, using default")
+        return nil
     }
     
     func applyTheme(to view: UIView, isDarkMode: Bool) {
@@ -447,6 +517,26 @@ class ThemeManager {
     }
     
     func getTheme(named themeName: String) -> ColorTheme? {
-        return getAllThemes().first(where: { $0.name == themeName })
+        // Debug logs for theme retrieval
+        print("Attempting to find theme: \(themeName)")
+        
+        // First, check predefined themes
+        let predefinedThemes = ColorTheme.allThemes()
+        if let theme = predefinedThemes.first(where: { $0.name == themeName }) {
+            print("Found predefined theme: \(theme.name)")
+            return theme
+        }
+        
+        // Then check custom themes
+        let customThemes = loadCustomThemes()
+        if let theme = customThemes.first(where: { $0.name == themeName }) {
+            print("Found custom theme: \(theme.name)")
+            return theme
+        }
+        
+        // If we couldn't find the theme, print all available themes for debugging
+        let allThemeNames = getAllThemes().map { $0.name }
+        print("Theme '\(themeName)' not found among available themes: \(allThemeNames)")
+        return nil
     }
 }

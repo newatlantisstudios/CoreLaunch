@@ -28,9 +28,6 @@ class SettingsViewController: UIViewController {
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     weak var delegate: SettingsDelegate?
     
-    // Profile management
-    private var profiles: [Profile] = []
-    
     // Current theme
     private var currentTheme: ColorTheme = ThemeManager.shared.currentTheme
     
@@ -1264,45 +1261,14 @@ class SettingsViewController: UIViewController {
         }
     }
     
-    private func showAddProfileDialog() {
-        let alert = UIAlertController(
-            title: "New Profile",
-            message: "Enter a name for your new settings profile",
-            preferredStyle: .alert
-        )
-        
-        alert.addTextField { textField in
-            textField.placeholder = "Profile Name"
-        }
-        
-        let createAction = UIAlertAction(title: "Create", style: .default) { [weak self] _ in
-            guard let self = self, let textField = alert.textFields?.first,
-                  let profileName = textField.text, !profileName.isEmpty else {
-                return
-            }
-            
-            // Create new profile with current settings
-            let newProfile = ProfileManager.shared.createProfile(name: profileName)
-            
-            // Switch to the new profile
-            if let index = ProfileManager.shared.profiles.firstIndex(where: { $0.id == newProfile.id }) {
-                ProfileManager.shared.switchToProfile(at: index)
-            }
-            
-            // Refresh UI
-            self.loadSettings()
-            self.tableView.reloadData()
-        }
-        
-        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
-        
-        alert.addAction(createAction)
-        alert.addAction(cancelAction)
-        
-        present(alert, animated: true)
-    }
     
     private func saveSettings() {
+        // Print current settings before saving
+        print("Saving settings:")
+        print("  - Monochrome Icons: \(useMonochromeIcons)")
+        print("  - Show Motivational: \(showMotivationalMessages)")
+        print("  - Current Theme: \(currentTheme.name)")
+        
         let defaults = UserDefaults.standard
         defaults.set(use24HourTime, forKey: "use24HourTime")
         defaults.set(showDate, forKey: "showDate")
@@ -1312,15 +1278,26 @@ class SettingsViewController: UIViewController {
         defaults.set(textSizeMultiplier, forKey: "textSizeMultiplier")
         defaults.set(fontName, forKey: "fontName")
         
-        // Theme is saved through ThemeManager
-        ThemeManager.shared.currentTheme = currentTheme
+        // Force immediate save
+        defaults.synchronize()
         
-        // Update current profile
-        ProfileManager.shared.updateActiveProfile()
+        // Save theme through ThemeManager
+        if ThemeManager.shared.currentTheme.name != currentTheme.name {
+            print("Updating theme from \(ThemeManager.shared.currentTheme.name) to \(currentTheme.name)")
+            ThemeManager.shared.currentTheme = currentTheme
+        }
+        
+        // Also save theme name
+        defaults.set(currentTheme.name, forKey: "selectedThemeName")
+        
+        defaults.synchronize()
     }
     
     private func loadSettings() {
         let defaults = UserDefaults.standard
+        
+        // Force synchronize to get the most current values
+        defaults.synchronize()
         
         // Load the current settings
         use24HourTime = defaults.bool(forKey: "use24HourTime")
@@ -1340,8 +1317,33 @@ class SettingsViewController: UIViewController {
         // Load theme from ThemeManager
         currentTheme = ThemeManager.shared.currentTheme
         
-        // Refresh profiles list
-        profiles = ProfileManager.shared.profiles
+        print("Loaded settings:")
+        print("  - Monochrome Icons: \(useMonochromeIcons)")
+        print("  - Show Motivational: \(showMotivationalMessages)")
+        print("  - Theme: \(currentTheme.name)")
+    }
+    
+    // Method to update UI elements with current settings
+    private func updateUIWithCurrentSettings() {
+        // Find all the switch controls and update them
+        for cell in tableView.visibleCells {
+            if let switchView = cell.accessoryView as? UISwitch {
+                switch switchView.tag {
+                case 0: // 24-Hour Time
+                    switchView.isOn = use24HourTime
+                case 1: // Show Date
+                    switchView.isOn = showDate
+                case 2: // Minimalist Style
+                    switchView.isOn = useMinimalistStyle
+                case 3: // Monochrome Icons
+                    switchView.isOn = useMonochromeIcons
+                case 4: // Motivational Messages
+                    switchView.isOn = showMotivationalMessages
+                default:
+                    break
+                }
+            }
+        }
     }
     
     private func loadApps() {
@@ -1363,28 +1365,26 @@ class SettingsViewController: UIViewController {
 extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UIColorPickerViewControllerDelegate {
     
     func numberOfSections(in tableView: UITableView) -> Int {
-        return 9
+        return 8
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch section {
         case 0:
-            return ProfileManager.shared.profiles.count + 1 // Profiles + Add New Profile
-        case 1:
             return 2 // Time settings
-        case 2:
+        case 1:
             return 1 // Appearance settings
-        case 3:
+        case 2:
             return 1 // Icon settings
-        case 4:
+        case 3:
             return 1 // Wellness settings
-        case 5:
+        case 4:
             return 2 // Text size and font settings
-        case 6:
+        case 5:
             return 3 // Theme settings (Select theme, Custom theme, Create new theme)
-        case 7:
+        case 6:
             return 2 // Focus & Mindfulness (Focus Mode and Breathing Room)
-        case 8:
+        case 7:
             return allApps.count // App selection
         default:
             return 0
@@ -1394,22 +1394,20 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         switch section {
         case 0:
-            return "Profiles"
-        case 1:
             return "Time Display"
-        case 2:
+        case 1:
             return "Appearance"
-        case 3:
+        case 2:
             return "App Icons"
-        case 4:
+        case 3:
             return "Wellness"
-        case 5:
+        case 4:
             return "Text Settings"
-        case 6:
+        case 5:
             return "Theme Settings"
-        case 7:
+        case 6:
             return "Focus & Mindfulness"
-        case 8:
+        case 7:
             return "HOME SCREEN APPS"
         default:
             return nil
@@ -1417,7 +1415,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     }
     
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
-        if section == 8 {
+        if section == 7 {
             // Create a header with a button to toggle edit mode
             let headerView = UIView(frame: CGRect(x: 0, y: 0, width: tableView.frame.width, height: 40))
             
@@ -1448,22 +1446,20 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     }
     
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        return section == 4 || section == 8 ? 44 : UITableView.automaticDimension
+        return section == 3 || section == 7 ? 44 : UITableView.automaticDimension
     }
     
     func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
         switch section {
-        case 0:
-            return "Create and switch between different setting profiles."
-        case 4:
+        case 3:
             return "Motivational messages will appear on your home screen to encourage digital wellbeing."
-        case 5:
+        case 4:
             return "Adjust the text size and font used throughout the app."
-        case 6:
+        case 5:
             return "Choose a color theme or create your own custom theme."
-        case 7:
+        case 6:
             return "Tools to help you stay focused and mindful when using your apps."
-        case 8:
+        case 7:
             return "Toggle which apps appear on your home screen."
         default:
             return nil
@@ -1478,6 +1474,66 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     // Using titleForFooterInSection instead of custom views for better text handling
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        // Handle app selection section differently
+        if indexPath.section == 8 {
+            // Directly use a value cell for the app section
+            let cell = tableView.dequeueReusableCell(withIdentifier: "SettingsValueCell", for: indexPath)
+            cell.selectionStyle = .default
+            
+            if indexPath.row < allApps.count {
+                let app = allApps[indexPath.row]
+                cell.textLabel?.text = app.name
+                
+                // Set detail text to show selected iOS app or "None"
+                let selectedAppName = getIOSAppName(from: app.appURLScheme) ?? "None"
+                cell.detailTextLabel?.text = selectedAppName
+                cell.detailTextLabel?.textColor = .secondaryLabel
+                
+                // Create a custom app icon that matches the home screen
+                let iconSize: CGFloat = 12
+                let circleView = UIView(frame: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
+                circleView.backgroundColor = app.getIconColor(useMonochrome: useMonochromeIcons, isDarkMode: traitCollection.userInterfaceStyle == .dark)
+                circleView.layer.cornerRadius = iconSize / 2
+                circleView.clipsToBounds = true
+                
+                // Add the circle to a custom view that we'll place in the cell
+                let containerView = UIView(frame: CGRect(x: 0, y: 0, width: 20, height: 20))
+                containerView.backgroundColor = .clear
+                circleView.translatesAutoresizingMaskIntoConstraints = false
+                containerView.addSubview(circleView)
+                
+                // Center the circle in its container
+                NSLayoutConstraint.activate([
+                    circleView.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+                    circleView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+                    circleView.widthAnchor.constraint(equalToConstant: iconSize),
+                    circleView.heightAnchor.constraint(equalToConstant: iconSize)
+                ])
+                
+                // Create an image from the container view
+                UIGraphicsBeginImageContextWithOptions(containerView.bounds.size, false, 0)
+                if let context = UIGraphicsGetCurrentContext() {
+                    containerView.layer.render(in: context)
+                    let image = UIGraphicsGetImageFromCurrentImageContext()
+                    UIGraphicsEndImageContext()
+                    
+                    // Set the image to the cell's imageView
+                    cell.imageView?.image = image
+                }
+                
+                // Add a status indicator based on whether the app is enabled
+                if !app.isSelected {
+                    cell.detailTextLabel?.text = "Disabled"
+                    cell.detailTextLabel?.textColor = .systemRed
+                }
+                
+                cell.accessoryType = .disclosureIndicator
+            }
+            
+            return cell
+        }
+        
+        // For other sections, use the regular approach
         let cell = tableView.dequeueReusableCell(withIdentifier: "SettingsCell", for: indexPath)
         cell.selectionStyle = .none
         
@@ -1488,30 +1544,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
         cell.accessoryView = switchView
         
         switch indexPath.section {
-        case 0: // Profiles section
-            cell.accessoryView = nil
-            
-            if indexPath.row < ProfileManager.shared.profiles.count {
-                // Profile cell
-                let profile = ProfileManager.shared.profiles[indexPath.row]
-                cell.textLabel?.text = profile.name
-                
-                // Check if this is the active profile
-                if indexPath.row == ProfileManager.shared.activeProfileIndex {
-                    cell.accessoryType = .checkmark
-                } else {
-                    cell.accessoryType = .none
-                }
-                
-                cell.selectionStyle = .default
-            } else {
-                // Add new profile cell
-                cell.textLabel?.text = "Add New Profile"
-                cell.accessoryType = .disclosureIndicator
-                cell.selectionStyle = .default
-            }
-            
-        case 1:
+        case 0: // Time Display
             switch indexPath.row {
             case 0:
                 cell.textLabel?.text = "24-Hour Time"
@@ -1526,7 +1559,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             default:
                 break
             }
-        case 2:
+        case 1: // Appearance
             switch indexPath.row {
             case 0:
                 cell.textLabel?.text = "Minimalist Style"
@@ -1536,7 +1569,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             default:
                 break
             }
-        case 3:
+        case 2: // App Icons
             switch indexPath.row {
             case 0:
                 cell.textLabel?.text = "Monochrome App Icons"
@@ -1546,7 +1579,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             default:
                 break
             }
-        case 4: // Wellness settings
+        case 3: // Wellness settings
             switch indexPath.row {
             case 0:
                 cell.textLabel?.text = "Show Motivational Messages"
@@ -1556,7 +1589,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             default:
                 break
             }
-        case 5: // Text Settings
+        case 4: // Text Settings
             cell.accessoryView = nil // Clear switch for these cells
             
             switch indexPath.row {
@@ -1591,7 +1624,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             default:
                 break
             }
-        case 6: // Theme settings
+        case 5: // Theme settings
             cell.accessoryView = nil
             switch indexPath.row {
             case 0: // Theme selection
@@ -1642,7 +1675,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
                 break
             }
             
-        case 7: // Focus & Mindfulness
+        case 6: // Focus & Mindfulness
             cell.accessoryType = .disclosureIndicator
             cell.accessoryView = nil // Remove switch view
             
@@ -1661,51 +1694,9 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
                 break
             }
             
-        case 8: // App selection
-            if indexPath.row < allApps.count {
-                let app = allApps[indexPath.row]
-                cell.textLabel?.text = app.name
-                
-                // Use disclosure indicator instead of switch
-                cell.accessoryView = nil
-                cell.accessoryType = .disclosureIndicator
-                
-                // Create a custom app icon that matches the home screen
-                let iconSize: CGFloat = 12
-                let circleView = UIView(frame: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
-                circleView.backgroundColor = app.getIconColor(useMonochrome: useMonochromeIcons, isDarkMode: traitCollection.userInterfaceStyle == .dark)
-                circleView.layer.cornerRadius = iconSize / 2
-                circleView.clipsToBounds = true
-                
-                // Add the circle to a custom view that we'll place in the cell
-                let containerView = UIView(frame: CGRect(x: 0, y: 0, width: 20, height: 20))
-                containerView.backgroundColor = .clear
-                circleView.translatesAutoresizingMaskIntoConstraints = false
-                containerView.addSubview(circleView)
-                
-                // Center the circle in its container
-                NSLayoutConstraint.activate([
-                    circleView.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
-                    circleView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-                    circleView.widthAnchor.constraint(equalToConstant: iconSize),
-                    circleView.heightAnchor.constraint(equalToConstant: iconSize)
-                ])
-                
-                // Create an image from the container view
-                UIGraphicsBeginImageContextWithOptions(containerView.bounds.size, false, 0)
-                if let context = UIGraphicsGetCurrentContext() {
-                    containerView.layer.render(in: context)
-                    let image = UIGraphicsGetImageFromCurrentImageContext()
-                    UIGraphicsEndImageContext()
-                    
-                    // Set the image to the cell's imageView
-                    cell.imageView?.image = image
-                }
-                
-                cell.selectionStyle = .default // Enable selection for tapping the row
-                
-                return cell
-            }
+        case 7: // App selection
+            // This section is now handled at the beginning of the method
+            break
         default:
             break
         }
@@ -1714,20 +1705,32 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     }
     
     @objc func switchChanged(_ sender: UISwitch) {
+        let defaults = UserDefaults.standard
+        
         switch sender.tag {
         case 0:
             use24HourTime = sender.isOn
+            defaults.set(use24HourTime, forKey: "use24HourTime")
         case 1:
             showDate = sender.isOn
+            defaults.set(showDate, forKey: "showDate")
         case 2:
             useMinimalistStyle = sender.isOn
+            defaults.set(useMinimalistStyle, forKey: "useMinimalistStyle")
         case 3:
             useMonochromeIcons = sender.isOn
+            defaults.set(useMonochromeIcons, forKey: "useMonochromeIcons")
+            print("Monochrome Icons setting changed to: \(useMonochromeIcons)")
         case 4:
             showMotivationalMessages = sender.isOn
+            defaults.set(showMotivationalMessages, forKey: "showMotivationalMessages")
+            print("Show Motivational Messages setting changed to: \(showMotivationalMessages)")
         default:
             break
         }
+        
+        // Immediately synchronize to ensure settings are saved
+        defaults.synchronize()
     }
     
     @objc func textSizeChanged(_ sender: UISlider) {
@@ -1751,7 +1754,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
         }
     }
     
-    // Show app options menu with toggle and color picker
+    // Show app options menu with toggle, color picker, and app selection
     private func showAppOptionsMenu(for appIndex: Int, at indexPath: IndexPath) {
         let app = allApps[appIndex]
         
@@ -1761,6 +1764,11 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             message: "Manage app settings",
             preferredStyle: .actionSheet
         )
+        
+        // Add option to select which iOS app to launch
+        let selectAppAction = UIAlertAction(title: "Select App to Launch", style: .default) { [weak self] _ in
+            self?.showAppSelectionPicker(for: appIndex)
+        }
         
         // Add option to change color
         let changeColorAction = UIAlertAction(title: "Change Color", style: .default) { [weak self] _ in
@@ -1789,6 +1797,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
         let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
         
         // Add actions to the sheet
+        actionSheet.addAction(selectAppAction)
         actionSheet.addAction(changeColorAction)
         actionSheet.addAction(toggleAction)
         actionSheet.addAction(cancelAction)
@@ -1807,6 +1816,136 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
         colorPickerVC.view.tag = appIndex
         
         present(colorPickerVC, animated: true)
+    }
+    
+    private func getIOSAppName(from urlScheme: String) -> String? {
+        // Map URL schemes to human-readable app names
+        let schemeToAppName: [String: String] = [
+            "sms:": "Messages",
+            "sms://": "Messages",
+            "messages:": "Messages",
+            "builtin:messages": "Messages",
+            "tel:": "Phone",
+            "mailto:": "Mail",
+            "https://": "Safari",
+            "mobilenotes:": "Notes",
+            "calshow:": "Calendar",
+            "photos-redirect:": "Photos",
+            "App-prefs:": "Settings",
+            "maps:": "Maps",
+            "music:": "Music",
+            "facetime:": "FaceTime",
+            "camera:": "Camera",
+            "itms-apps:": "App Store",
+            "ibooks:": "Books",
+            "x-apple-health:": "Health",
+            "shareddocuments:": "Files"
+        ]
+        
+        return schemeToAppName[urlScheme]
+    }
+    
+    private func showAppSelectionPicker(for appIndex: Int) {
+        let app = allApps[appIndex]
+        
+        // Create an alert controller with a custom app picker
+        let alert = UIAlertController(
+            title: "Select App to Launch",
+            message: "Choose which iOS app to launch when \(app.name) is tapped",
+            preferredStyle: .alert
+        )
+        
+        // Define common iOS app URL schemes
+        let commonApps = [
+            ("Messages", "builtin:messages"),
+            ("Mail", "mailto:"),
+            ("Safari", "https://"),
+            ("Notes", "mobilenotes:"),
+            ("Calendar", "calshow:"),
+            ("Photos", "photos-redirect:"),
+            ("Settings", "App-prefs:"),
+            ("Maps", "maps:"),
+            ("Music", "music:"),
+            ("FaceTime", "facetime:"),
+            ("Camera", "camera:"),
+            ("App Store", "itms-apps:"),
+            ("Books", "ibooks:"),
+            ("Health", "x-apple-health:"),
+            ("Files", "shareddocuments:")
+        ]
+        
+        // Set default app based on the name if no URL scheme is currently set
+        if app.appURLScheme.isEmpty {
+            // Match app name to default app scheme
+            let defaultMapping = [
+                "Messages": "builtin:messages",
+                "Mail": "mailto:",
+                "Internet": "https://",
+                "Safari": "https://",
+                "Notes": "mobilenotes:",
+                "Calendar": "calshow:",
+                "Photos": "photos-redirect:",
+                "Settings": "App-prefs:",
+                "Maps": "maps:",
+                "Music": "music:",
+                "FaceTime": "facetime:",
+                "Camera": "camera:"
+            ]
+            
+            if let defaultScheme = defaultMapping[app.name] {
+                // Auto-select the default if name matches
+                allApps[appIndex].appURLScheme = defaultScheme
+                saveAppSelectionsToUserDefaults()
+                
+                // Show confirmation of the automatic selection
+                showAppSelectionConfirmation(appName: getIOSAppName(from: defaultScheme) ?? defaultScheme, for: app.name)
+                
+                // Notify delegate
+                delegate?.didUpdateAppSelections(allApps)
+                
+                // Return early - we've already set the default
+                return
+            }
+        }
+        
+        // Add action for each common app
+        for (appName, urlScheme) in commonApps {
+            let action = UIAlertAction(title: appName, style: .default) { [weak self] _ in
+                guard let self = self else { return }
+                
+                // Update the app's URL scheme
+                self.allApps[appIndex].appURLScheme = urlScheme
+                
+                // Save to UserDefaults
+                self.saveAppSelectionsToUserDefaults()
+                
+                // Show confirmation
+                self.showAppSelectionConfirmation(appName: appName, for: app.name)
+                
+                // Notify delegate
+                self.delegate?.didUpdateAppSelections(self.allApps)
+            }
+            alert.addAction(action)
+        }
+        
+        // Add cancel action
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
+        alert.addAction(cancelAction)
+        
+        present(alert, animated: true)
+    }
+    
+    private func showAppSelectionConfirmation(appName: String, for coreAppName: String) {
+        let alert = UIAlertController(
+            title: "App Selected",
+            message: "\(appName) will now launch when you tap on \(coreAppName)",
+            preferredStyle: .alert
+        )
+        
+        let okAction = UIAlertAction(title: "OK", style: .default)
+        alert.addAction(okAction)
+        
+        present(alert, animated: true)
     }
     
     private func saveAppSelectionsToUserDefaults() {
@@ -1934,22 +2073,13 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     // MARK: - Table View Editing Support
     
     func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
-        // Allow editing in profiles and apps sections
-        return indexPath.section == 0 || indexPath.section == 8
+        // Allow editing only in the apps section
+        return indexPath.section == 7
     }
     
     func tableView(_ tableView: UITableView, editingStyleForRowAt indexPath: IndexPath) -> UITableViewCell.EditingStyle {
-        // Handle profiles section
-        if indexPath.section == 0 {
-            // Can't delete the "Add New Profile" row
-            if indexPath.row == ProfileManager.shared.profiles.count {
-                return .none
-            }
-            return .delete
-        }
-        
         // During reordering mode, don't show delete buttons
-        if indexPath.section == 8 && tableView.isEditing {
+        if indexPath.section == 7 && tableView.isEditing {
             return .none
         }
         return .delete
@@ -1957,12 +2087,12 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     
     func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
         // Only allow moving in the apps section
-        return indexPath.section == 8
+        return indexPath.section == 7
     }
     
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
         // Match the row height of the home screen for app cells
-        if indexPath.section == 8 {
+        if indexPath.section == 7 {
             return 60
         }
         return UITableView.automaticDimension
@@ -1970,7 +2100,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     
     func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
         // Ensure we're only moving within the apps section
-        guard sourceIndexPath.section == 8 && destinationIndexPath.section == 8 else { return }
+        guard sourceIndexPath.section == 7 && destinationIndexPath.section == 7 else { return }
         
         // Update the app order in our data model
         let movedApp = allApps.remove(at: sourceIndexPath.row)
@@ -1984,26 +2114,10 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        // Handle profile selection
-        if indexPath.section == 0 {
-            if indexPath.row < ProfileManager.shared.profiles.count {
-                // Switch to selected profile
-                ProfileManager.shared.switchToProfile(at: indexPath.row)
-                
-                // Reload settings from the selected profile
-                loadSettings()
-                
-                // Update UI
-                tableView.reloadData()
-            } else {
-                // Show dialog to create new profile
-                showAddProfileDialog()
-            }
-        }
         // Show font picker when font cell is selected
-        else if indexPath.section == 5 && indexPath.row == 1 {
+        if indexPath.section == 4 && indexPath.row == 1 {
             showFontSelectionMenu(for: indexPath)
-        } else if indexPath.section == 6 {
+        } else if indexPath.section == 5 {
             switch indexPath.row {
             case 0: // Theme selection
                 showThemeSelectionMenu()
@@ -2014,7 +2128,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             default:
                 break
             }
-        } else if indexPath.section == 7 {
+        } else if indexPath.section == 6 {
             switch indexPath.row {
             case 0: // Focus Mode
                 let focusModeVC = FocusModeViewController()
@@ -2027,7 +2141,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             default:
                 break
             }
-        } else if indexPath.section == 8 {
+        } else if indexPath.section == 7 {
             // Handle app selection when tapping on an app row
             if indexPath.row < allApps.count {
                 // Show options for this app
@@ -2188,26 +2302,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     }
     
     func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if indexPath.section == 0 && editingStyle == .delete {
-            // Delete profile
-            if ProfileManager.shared.profiles.count > 1 {
-                ProfileManager.shared.deleteProfile(at: indexPath.row)
-                tableView.deleteRows(at: [indexPath], with: .automatic)
-                
-                // Refresh UI
-                loadSettings()
-                tableView.reloadData()
-            } else {
-                let alert = UIAlertController(
-                    title: "Cannot Delete",
-                    message: "You must have at least one profile",
-                    preferredStyle: .alert
-                )
-                let okAction = UIAlertAction(title: "OK", style: .default)
-                alert.addAction(okAction)
-                present(alert, animated: true)
-            }
-        } else if indexPath.section == 8 && editingStyle == .delete {
+        if indexPath.section == 7 && editingStyle == .delete {
             // Prevent deleting all apps - maintain at least one app
             if allApps.count <= 1 {
                 let alert = UIAlertController(

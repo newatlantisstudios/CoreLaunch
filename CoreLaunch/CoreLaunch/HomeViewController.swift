@@ -165,7 +165,7 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         dateLabel.translatesAutoresizingMaskIntoConstraints = false
         
         NSLayoutConstraint.activate([
-            timeLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 40),
+            timeLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 60),
             timeLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             timeLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             timeLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
@@ -320,16 +320,15 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
     
     // MARK: - Data
     private func loadApps() {
-        // Define all available apps
+        // Define all available apps with default URL schemes
         let defaultApps = [
-            AppItem(name: "Messages", color: .systemBlue),
-            AppItem(name: "Phone", color: .systemGreen),
-            AppItem(name: "Mail", color: .systemIndigo),
-            AppItem(name: "Internet", color: .systemOrange),
-            AppItem(name: "Notes", color: .systemYellow),
-            AppItem(name: "Calendar", color: .systemRed),
-            AppItem(name: "Photos", color: .systemPurple),
-            AppItem(name: "Settings", color: .systemGray)
+            AppItem(name: "Messages", color: .systemBlue, isSelected: true, appURLScheme: "builtin:messages"),
+            AppItem(name: "Mail", color: .systemIndigo, isSelected: true, appURLScheme: "mailto:"),
+            AppItem(name: "Internet", color: .systemOrange, isSelected: true, appURLScheme: "https://"),
+            AppItem(name: "Notes", color: .systemYellow, isSelected: true, appURLScheme: "mobilenotes:"),
+            AppItem(name: "Calendar", color: .systemRed, isSelected: true, appURLScheme: "calshow:"),
+            AppItem(name: "Photos", color: .systemPurple, isSelected: true, appURLScheme: "photos-redirect:"),
+            AppItem(name: "Settings", color: .systemGray, isSelected: true, appURLScheme: "App-prefs:")
         ]
         
         // Check if we have saved apps data
@@ -384,6 +383,50 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
             let decoder = JSONDecoder()
             allApps = try decoder.decode([AppItem].self, from: data)
             print("DEBUG: Successfully loaded \(allApps.count) apps from UserDefaults")
+            
+            // Check for empty URL schemes and set defaults
+            var updatedApps = false
+            var updatedAppsList = [AppItem]()
+            
+            for app in allApps {
+                var updatedApp = app
+                
+                if app.appURLScheme.isEmpty {
+                    // Default URL scheme mapping
+                    let defaultMapping = [
+                        "Messages": "builtin:messages",
+                        "Mail": "mailto:",
+                        "Internet": "https://",
+                        "Safari": "https://",
+                        "Notes": "mobilenotes:",
+                        "Calendar": "calshow:",
+                        "Photos": "photos-redirect:",
+                        "Settings": "App-prefs:",
+                        "Maps": "maps:",
+                        "Music": "music:",
+                        "FaceTime": "facetime:",
+                        "Camera": "camera:"
+                    ]
+                    
+                    if let defaultScheme = defaultMapping[app.name] {
+                        print("DEBUG: Setting default URL scheme for \(app.name) to \(defaultScheme)")
+                        updatedApp.appURLScheme = defaultScheme
+                        updatedApps = true
+                    }
+                }
+                
+                updatedAppsList.append(updatedApp)
+            }
+            
+            // Use updated list if changes were made
+            if updatedApps {
+                allApps = updatedAppsList
+            }
+            
+            // Save updates if needed
+            if updatedApps {
+                saveAppsToUserDefaults()
+            }
             
             // Update cache
             for app in allApps {
@@ -565,9 +608,19 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
             return
         }
         
+        // Get associated iOS app name for the message
+        let iOSAppName = getIOSAppName(from: app.appURLScheme)
+        var message = ""
+        
+        if !app.appURLScheme.isEmpty && iOSAppName != nil {
+            message = "Would you like to open \(iOSAppName!) via \(app.name)? CoreLaunch will track your usage time."
+        } else {
+            message = "Would you like to open \(app.name)? CoreLaunch will track your usage time."
+        }
+        
         let alert = UIAlertController(
             title: "Launch \(app.name)",
-            message: "Would you like to open \(app.name)? CoreLaunch will track your usage time.",
+            message: message,
             preferredStyle: .alert
         )
         
@@ -592,6 +645,35 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         present(alert, animated: true)
     }
     
+    private func getIOSAppName(from urlScheme: String) -> String? {
+        // Map URL schemes to human-readable app names
+        let schemeToAppName: [String: String] = [
+            "sms:": "Messages",
+            "sms://": "Messages",
+            "messages:": "Messages",
+            "builtin:messages": "Messages",
+            "tel:": "Phone",
+            "tel://": "Phone",
+            "mobilephone:": "Phone",
+            "mailto:": "Mail",
+            "https://": "Safari",
+            "mobilenotes:": "Notes",
+            "calshow:": "Calendar",
+            "photos-redirect:": "Photos",
+            "App-prefs:": "Settings",
+            "maps:": "Maps",
+            "music:": "Music",
+            "facetime:": "FaceTime",
+            "camera:": "Camera",
+            "itms-apps:": "App Store",
+            "ibooks:": "Books",
+            "x-apple-health:": "Health",
+            "shareddocuments:": "Files"
+        ]
+        
+        return schemeToAppName[urlScheme]
+    }
+    
     private func showReturnReminder(for app: AppItem) {
         let reminder = UIAlertController(
             title: "Remember to Return",
@@ -603,6 +685,44 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         reminder.addAction(okAction)
         
         present(reminder, animated: true)
+    }
+    
+    private func showNoAppConfiguredAlert(for app: AppItem) {
+        let alert = UIAlertController(
+            title: "No App Configured",
+            message: "No iOS app has been configured for \(app.name). Please go to Settings to select an app to launch.",
+            preferredStyle: .alert
+        )
+        
+        let settingsAction = UIAlertAction(title: "Go to Settings", style: .default) { [weak self] _ in
+            self?.settingsButtonTapped()
+        }
+        
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
+        
+        alert.addAction(settingsAction)
+        alert.addAction(cancelAction)
+        
+        present(alert, animated: true)
+    }
+    
+    private func showInvalidURLSchemeAlert(for app: AppItem) {
+        let alert = UIAlertController(
+            title: "App Launch Failed",
+            message: "The URL scheme for \(app.name) is invalid. Please go to Settings to reconfigure it.",
+            preferredStyle: .alert
+        )
+        
+        let settingsAction = UIAlertAction(title: "Go to Settings", style: .default) { [weak self] _ in
+            self?.settingsButtonTapped()
+        }
+        
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
+        
+        alert.addAction(settingsAction)
+        alert.addAction(cancelAction)
+        
+        present(alert, animated: true)
     }
     
     private func checkForPendingAppSessions() {
@@ -732,14 +852,74 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         // Record app launch in usage statistics
         _ = UsageTracker.shared.recordAppLaunch(appName: app.name)
         
-        // Log the launch
-        print("Would launch: \(app.name)")
-        
         // Show a reminder to return to CoreLaunch
         self.showReturnReminder(for: app)
         
-        // In a real app, you would use URL schemes to launch apps
-        // For example: UIApplication.shared.open(URL(string: "messages://")!)
+        // Launch the associated iOS app if a URL scheme is set
+        if !app.appURLScheme.isEmpty {
+            // Handle our custom URL schemes
+            if app.appURLScheme.starts(with: "builtin:") {
+                // Extract the app name from our custom scheme
+                let appName = app.appURLScheme.replacingOccurrences(of: "builtin:", with: "")
+                
+                // Handle specific apps
+                if appName == "messages" {
+                    // For Messages app, use MFMessageComposeViewController to show main screen
+                    // But since we can't directly open to the conversation list without creating a new message,
+                    // we'll use a workable non-composing alternative
+                    if let url = URL(string: "messages://"){
+                        print("Attempting to launch Messages app to main screen with messages:// URL")
+                        UIApplication.shared.open(url, options: [:], completionHandler: { success in
+                            if !success {
+                                // Fallback to standard SMS URL if messages:// fails
+                                if let fallbackURL = URL(string: "sms:") {
+                                    print("Falling back to sms: URL for Messages app")
+                                    UIApplication.shared.open(fallbackURL, options: [:], completionHandler: nil)
+                                }
+                            }
+                        })
+                    }
+                    return
+                }
+            }
+            
+            // Special case for Phone app - open directly to the keypad using a documented URL scheme
+            if app.name == "Phone" && app.appURLScheme == "tel:" {
+                print("Attempting to launch Phone app keypad")
+                
+                // The secret is to use a more specific URL scheme for the phone app keypad
+                if let phoneURL = URL(string: "tel://") {
+                    print("Trying tel:// URL scheme")
+                    UIApplication.shared.open(phoneURL, options: [:], completionHandler: nil)
+                    return // Exit early as we've handled the phone app 
+                }
+                
+                // If the above fails, try an alternative approach
+                if let phoneURL = URL(string: "telprompt:") {
+                    print("Trying telprompt: URL scheme")
+                    UIApplication.shared.open(phoneURL, options: [:], completionHandler: nil)
+                    return
+                }
+                
+                // One more fallback attempt - try to access the app directly
+                if let phoneURL = URL(string: "mobilephone:") {
+                    print("Trying mobilephone: URL scheme")
+                    UIApplication.shared.open(phoneURL, options: [:], completionHandler: nil)
+                    return
+                }
+            }
+            // Standard URL scheme handling for other apps
+            else if let url = URL(string: app.appURLScheme) {
+                print("Launching: \(app.name) with URL scheme: \(app.appURLScheme)")
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            } else {
+                print("Invalid URL scheme for: \(app.name) - \(app.appURLScheme)")
+                showInvalidURLSchemeAlert(for: app)
+            }
+        } else {
+            print("No URL scheme set for: \(app.name)")
+            showNoAppConfiguredAlert(for: app)
+        }
     }
     
     // MARK: - Achievements

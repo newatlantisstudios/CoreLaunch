@@ -12,22 +12,25 @@ struct AppItem: Codable {
     let name: String
     var color: UIColor
     var isSelected: Bool = true
+    var appURLScheme: String = ""
     
     // Custom Codable implementation for UIColor
     enum CodingKeys: String, CodingKey {
-        case name, isSelected, colorName
+        case name, isSelected, colorName, appURLScheme
     }
     
-    init(name: String, color: UIColor, isSelected: Bool = true) {
+    init(name: String, color: UIColor, isSelected: Bool = true, appURLScheme: String = "") {
         self.name = name
         self.color = color
         self.isSelected = isSelected
+        self.appURLScheme = appURLScheme
     }
     
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
         try container.encode(isSelected, forKey: .isSelected)
+        try container.encode(appURLScheme, forKey: .appURLScheme)
         
         // Store color name as a string
         let colorName = getColorName(for: color)
@@ -40,6 +43,7 @@ struct AppItem: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
         isSelected = try container.decode(Bool.self, forKey: .isSelected)
+        appURLScheme = try container.decodeIfPresent(String.self, forKey: .appURLScheme) ?? ""
         
         // Decode color from name
         let colorName = try container.decode(String.self, forKey: .colorName)
