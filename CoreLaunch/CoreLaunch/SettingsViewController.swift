@@ -1347,16 +1347,37 @@ class SettingsViewController: UIViewController {
     }
     
     private func loadApps() {
-        // Load apps from UserDefaults
-        guard let data = UserDefaults.standard.data(forKey: "savedApps") else {
-            return
-        }
+        // Define default apps if none are saved
+        let defaultApps = [
+            AppItem(name: "Messages", color: .systemBlue, isSelected: true, appURLScheme: "builtin:messages"),
+            AppItem(name: "Mail", color: .systemIndigo, isSelected: true, appURLScheme: "mailto:"),
+            AppItem(name: "Internet", color: .systemOrange, isSelected: true, appURLScheme: "https://"),
+            AppItem(name: "Notes", color: .systemYellow, isSelected: true, appURLScheme: "mobilenotes:"),
+            AppItem(name: "Calendar", color: .systemRed, isSelected: true, appURLScheme: "calshow:"),
+            AppItem(name: "Photos", color: .systemPurple, isSelected: true, appURLScheme: "photos-redirect:"),
+            AppItem(name: "Settings", color: .systemGray, isSelected: true, appURLScheme: "App-prefs:")
+        ]
         
-        do {
-            let decoder = JSONDecoder()
-            allApps = try decoder.decode([AppItem].self, from: data)
-        } catch {
-            print("Failed to load apps: \(error)")
+        // Load apps from UserDefaults
+        if let data = UserDefaults.standard.data(forKey: "savedApps") {
+            do {
+                let decoder = JSONDecoder()
+                allApps = try decoder.decode([AppItem].self, from: data)
+                
+                // Check if we have the correct number of apps, if not, use defaults
+                if allApps.count != 7 {
+                    allApps = defaultApps
+                    saveAppSelectionsToUserDefaults()
+                }
+            } catch {
+                print("Failed to load apps: \(error)")
+                allApps = defaultApps
+                saveAppSelectionsToUserDefaults()
+            }
+        } else {
+            // No saved apps, use defaults
+            allApps = defaultApps
+            saveAppSelectionsToUserDefaults()
         }
     }
 }
@@ -1365,7 +1386,7 @@ class SettingsViewController: UIViewController {
 extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UIColorPickerViewControllerDelegate {
     
     func numberOfSections(in tableView: UITableView) -> Int {
-        return 8
+        return 9
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -1373,9 +1394,9 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
         case 0:
             return 2 // Time settings
         case 1:
-            return 1 // Appearance settings
+            return 2 // Appearance settings + Monochrome Icons
         case 2:
-            return 1 // Icon settings
+            return 0 // Removing duplicate entries
         case 3:
             return 1 // Wellness settings
         case 4:
@@ -1386,6 +1407,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             return 2 // Focus & Mindfulness (Focus Mode and Breathing Room)
         case 7:
             return allApps.count // App selection
+        case 8:
+            return 1 // Tip Jar section
         default:
             return 0
         }
@@ -1409,6 +1432,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             return "Focus & Mindfulness"
         case 7:
             return "HOME SCREEN APPS"
+        case 8:
+            return "SUPPORT"
         default:
             return nil
         }
@@ -1461,6 +1486,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             return "Tools to help you stay focused and mindful when using your apps."
         case 7:
             return "Toggle which apps appear on your home screen."
+        case 8:
+            return "Support the development of CoreLaunch."
         default:
             return nil
         }
@@ -1474,8 +1501,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
     // Using titleForFooterInSection instead of custom views for better text handling
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        // Handle app selection section differently
-        if indexPath.section == 8 {
+        // Handle HOME SCREEN APPS section
+        if indexPath.section == 7 {
             // Directly use a value cell for the app section
             let cell = tableView.dequeueReusableCell(withIdentifier: "SettingsValueCell", for: indexPath)
             cell.selectionStyle = .default
@@ -1489,10 +1516,22 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
                 cell.detailTextLabel?.text = selectedAppName
                 cell.detailTextLabel?.textColor = .secondaryLabel
                 
-                // Create a custom app icon that matches the home screen
+                // Use the app's color to create a colored circle icon
                 let iconSize: CGFloat = 12
                 let circleView = UIView(frame: CGRect(x: 0, y: 0, width: iconSize, height: iconSize))
-                circleView.backgroundColor = app.getIconColor(useMonochrome: useMonochromeIcons, isDarkMode: traitCollection.userInterfaceStyle == .dark)
+                
+                // Use the app's color from our defined list
+                switch app.name {
+                case "Messages": circleView.backgroundColor = .systemBlue
+                case "Mail": circleView.backgroundColor = .systemIndigo
+                case "Internet": circleView.backgroundColor = .systemOrange
+                case "Notes": circleView.backgroundColor = .systemYellow
+                case "Calendar": circleView.backgroundColor = .systemRed
+                case "Photos": circleView.backgroundColor = .systemPurple
+                case "Settings": circleView.backgroundColor = .systemGray
+                default: circleView.backgroundColor = app.getIconColor(useMonochrome: useMonochromeIcons, isDarkMode: traitCollection.userInterfaceStyle == .dark)
+                }
+                
                 circleView.layer.cornerRadius = iconSize / 2
                 circleView.clipsToBounds = true
                 
@@ -1533,6 +1572,21 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             return cell
         }
         
+        // Handle SUPPORT section
+        if indexPath.section == 8 {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "SettingsCell", for: indexPath)
+            cell.textLabel?.text = "Tip Jar"
+            cell.accessoryType = .disclosureIndicator
+            cell.accessoryView = nil
+            cell.selectionStyle = .default
+            
+            // Add a small icon
+            cell.imageView?.image = UIImage(systemName: "heart.fill")
+            cell.imageView?.tintColor = .systemPink
+            
+            return cell
+        }
+            
         // For other sections, use the regular approach
         let cell = tableView.dequeueReusableCell(withIdentifier: "SettingsCell", for: indexPath)
         cell.selectionStyle = .none
@@ -1566,12 +1620,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
                 switchView.isOn = useMinimalistStyle
                 switchView.tag = 2
                 switchView.addTarget(self, action: #selector(switchChanged(_:)), for: .valueChanged)
-            default:
-                break
-            }
-        case 2: // App Icons
-            switch indexPath.row {
-            case 0:
+            case 1:
                 cell.textLabel?.text = "Monochrome App Icons"
                 switchView.isOn = useMonochromeIcons
                 switchView.tag = 3
@@ -1579,6 +1628,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
             default:
                 break
             }
+        case 2: // App Icons - removed duplicate entries
+            break
         case 3: // Wellness settings
             switch indexPath.row {
             case 0:
@@ -1694,7 +1745,10 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
                 break
             }
             
-        case 7: // App selection
+        case 7: // Tip Jar
+            // This section is handled at the beginning of the method
+            break
+        case 8: // App selection
             // This section is now handled at the beginning of the method
             break
         default:
@@ -2147,6 +2201,11 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
                 // Show options for this app
                 showAppOptionsMenu(for: indexPath.row, at: indexPath)
             }
+        } else if indexPath.section == 8 {
+            // Handle tip jar button tap
+            let tipJarVC = TipJarViewController()
+            let navController = UINavigationController(rootViewController: tipJarVC)
+            present(navController, animated: true)
         }
         tableView.deselectRow(at: indexPath, animated: true)
     }

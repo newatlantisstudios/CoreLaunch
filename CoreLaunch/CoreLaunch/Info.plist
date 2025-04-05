@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>StoreKitProductIdentifiers</key>
+	<array>
+		<string>com.corelaunch.tipjar.small</string>
+		<string>com.corelaunch.tipjar.medium</string>
+		<string>com.corelaunch.tipjar.large</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -19,12 +25,6 @@
 			</array>
 		</dict>
 	</dict>
-	<key>NSCameraUsageDescription</key>
-	<string>Camera access is needed to scan theme QR codes</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Photo library access is needed to save and import theme QR codes</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Permission is needed to save theme QR codes to your photo library</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 </dict>

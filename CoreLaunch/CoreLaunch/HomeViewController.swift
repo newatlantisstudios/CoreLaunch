@@ -10,6 +10,9 @@ import UIKit
 class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDelegate {
     static var appCache: [String: AppItem] = [:]
     
+    // MARK: - App Item Definition
+    // This is the model for apps displayed in the home screen
+    
     // MARK: - Properties
     private let tableView = UITableView()
     private var allApps: [AppItem] = []
@@ -332,15 +335,44 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         ]
         
         // Check if we have saved apps data
-        let hasAppData = UserDefaults.standard.data(forKey: "savedApps") != nil
-        
-        if hasAppData {
-            // Load apps from UserDefaults
-            loadAppsFromUserDefaults()
+        if let data = UserDefaults.standard.data(forKey: "savedApps") {
+            do {
+                let decoder = JSONDecoder()
+                allApps = try decoder.decode([AppItem].self, from: data)
+                
+                // Check if we have the correct number of apps or incorrect set, if so, reset to defaults
+                if allApps.count != 7 || !hasCorrectAppNames(apps: allApps) {
+                    print("DEBUG: Resetting to default apps")
+                    allApps = defaultApps
+                    saveAppsToUserDefaults()
+                }
+            } catch {
+                print("Failed to load apps: \(error)")
+                allApps = defaultApps
+                saveAppsToUserDefaults()
+            }
         } else {
+            // No saved apps, use defaults
             allApps = defaultApps
             saveAppsToUserDefaults()
         }
+        
+        // Update displayed apps
+        updateDisplayedApps()
+    }
+    
+    private func hasCorrectAppNames(apps: [AppItem]) -> Bool {
+        let expectedNames = ["Messages", "Mail", "Internet", "Notes", "Calendar", "Photos", "Settings"]
+        let appNames = apps.map { $0.name }
+        
+        // Check that all expected names are in the app names
+        for expectedName in expectedNames {
+            if !appNames.contains(expectedName) {
+                return false
+            }
+        }
+        
+        return true
     }
     
     private func updateDisplayedApps() {
@@ -1100,13 +1132,24 @@ class AppCell: UITableViewCell {
         // Debug print
         print("DEBUG: AppCell configuring app: \(app.name) with color: \(app.color)")
         
-        // Always double-check the app cache for the latest color
+        // Use predefined colors based on app name for consistency
         let appColor: UIColor
-        if let cachedApp = HomeViewController.appCache[app.name] {
-            appColor = cachedApp.color
-            print("DEBUG: Using cached color for \(app.name): \(appColor)")
-        } else {
-            appColor = app.color
+        switch app.name {
+        case "Messages": appColor = .systemBlue
+        case "Mail": appColor = .systemIndigo
+        case "Internet": appColor = .systemOrange
+        case "Notes": appColor = .systemYellow
+        case "Calendar": appColor = .systemRed
+        case "Photos": appColor = .systemPurple
+        case "Settings": appColor = .systemGray
+        default:
+            // Fallback to cached or default color
+            if let cachedApp = HomeViewController.appCache[app.name] {
+                appColor = cachedApp.color
+                print("DEBUG: Using cached color for \(app.name): \(appColor)")
+            } else {
+                appColor = app.color
+            }
         }
         
         // Check UserDefaults for settings
