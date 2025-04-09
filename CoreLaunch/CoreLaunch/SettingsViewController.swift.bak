@@ -1532,9 +1532,6 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate, UI
                 default: circleView.backgroundColor = app.getIconColor(useMonochrome: useMonochromeIcons, isDarkMode: traitCollection.userInterfaceStyle == .dark)
                 }
                 
-                // Use the app's actual color property
-                circleView.backgroundColor = app.color
-                
                 circleView.layer.cornerRadius = iconSize / 2
                 circleView.clipsToBounds = true
                 

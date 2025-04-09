@@ -25,6 +25,9 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
     private let focusModeButton = UIButton(type: .system)
     internal let achievementsButton = UIButton(type: .system)
     
+    // Flag to track settings presentation
+    private var isPresentingSettings = false
+    
     // Focus mode
     private let focusManager = FocusModeManager.shared
     
@@ -74,15 +77,10 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         print("DEBUG: HomeViewController viewWillAppear called")
-        
-        // Force reload colors from UserDefaults every time
-        // Use a slight delay to ensure the transition animation doesn't interfere
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            print("DEBUG: Delayed reload of apps data from UserDefaults")
-            self.loadAppsFromUserDefaults(forceRefresh: true)
-            self.tableView.reloadData()
-        }
-        
+
+        // Ensure settings are loaded *before* potentially reloading table data
+        loadSettings()
+
         // Explicitly apply theme background
         view.backgroundColor = ThemeManager.shared.currentTheme.backgroundColor
         
@@ -92,7 +90,7 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         }
         
         // Update UI if needed
-        updateAppearance()
+        // updateAppearance() // Commented out to prevent flicker on settings open
         
         // Always check for pending sessions when returning to the app
         checkForPendingAppSessions()
@@ -559,7 +557,21 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
             navController.modalPresentationStyle = .formSheet
         }
         
-        present(navController, animated: true)
+        // Log state before presenting
+        print("--- DEBUG: settingsButtonTapped ---")
+        print("Current theme: \(ThemeManager.shared.currentTheme.name)")
+        if let firstApp = displayedApps.first {
+            print("First displayed app: \(firstApp.name), Color: \(firstApp.color)")
+        }
+        print("----------------------------------")
+
+        // Set flag to ignore theme changes during presentation
+        isPresentingSettings = true
+        
+        present(navController, animated: true) { [weak self] in
+            // Clear the flag when presentation is complete
+            self?.isPresentingSettings = false
+        }
     }
     
     @objc private func usageStatsButtonTapped() {
@@ -584,6 +596,12 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
     @objc private func userInterfaceStyleDidChange() {
         print("Interface style changed: \(traitCollection.userInterfaceStyle == .dark ? "dark" : "light")")
         
+        // Ignore interface style changes during settings presentation
+        if isPresentingSettings {
+            print("DEBUG: Ignoring interface style change during settings presentation")
+            return
+        }
+        
         // Reload theme if using Auto Light and Dark
         if currentTheme.name == "Auto Light and Dark" {
             // Re-fetch the theme to get updated colors based on new appearance
@@ -592,11 +610,24 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         
         // Update UI
         updateAppearance()
-        tableView.reloadData()
+        
+        // Only reload data if the view is fully visible and not in transition
+        if view.window != nil && !isMovingToParent && !isBeingPresented && !isBeingDismissed {
+            print("DEBUG: userInterfaceStyleDidChange reloading data")
+            tableView.reloadData()
+        } else {
+            print("DEBUG: userInterfaceStyleDidChange suppressing reloadData during transition/invisibility")
+        }
     }
     
     @objc private func themeDidChange() {
         print("Theme changed notification received")
+        
+        // Ignore theme changes during settings presentation
+        if isPresentingSettings {
+            print("DEBUG: Ignoring theme change during settings presentation")
+            return
+        }
         
         // Refresh current theme
         currentTheme = ThemeManager.shared.currentTheme
@@ -628,7 +659,14 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
         
         // Update UI
         updateAppearance()
-        tableView.reloadData()
+        
+        // Only reload data if the view is fully visible and not in transition
+        if view.window != nil && !isMovingToParent && !isBeingPresented && !isBeingDismissed {
+            print("DEBUG: themeDidChange reloading data")
+            tableView.reloadData()
+        } else {
+            print("DEBUG: themeDidChange suppressing reloadData during transition/invisibility")
+        }
     }
     
     // MARK: - App Launch Tracking
@@ -831,16 +869,13 @@ class HomeViewController: UIViewController, SettingsDelegate, BreathingRoomDeleg
             print("DEBUG: Updated app cache for \(app.name)")
         }
         
-        // Animate table view updates for a better user experience
+        // Animate table view updates for a better user experience - Restored animation
         UIView.transition(with: tableView, duration: 0.3, options: .transitionCrossDissolve, animations: {
             print("DEBUG: Reloading tableView in didUpdateAppSelections")
             self.tableView.reloadData()
         }, completion: { _ in
             // Force a second refresh to ensure all cells have the latest colors
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                print("DEBUG: Performing secondary reload of tableView")
-                self.tableView.reloadData()
-            }
+            print("DEBUG: Secondary reload removed.")
         })
     }
     
@@ -1044,13 +1079,32 @@ extension HomeViewController: UITableViewDataSource, UITableViewDelegate {
         }
         
         let app = displayedApps[indexPath.row]
-        cell.configure(with: app)
         
-        // Ensure proper background for Light theme
-        if ThemeManager.shared.currentTheme.name == "Light" {
-            cell.backgroundColor = .white
-            cell.contentView.backgroundColor = .white
-        }
+        // Fetch configuration data once
+        let currentTheme = ThemeManager.shared.currentTheme
+        let isDarkMode = traitCollection.userInterfaceStyle == .dark
+        
+        // Log data being passed to cell
+        print("--- DEBUG: cellForRowAt (row \(indexPath.row)) ---")
+        print("Fetching cell for app: \(app.name)")
+        print("App color from displayedApps: \(app.color)")
+        print("Passing theme: \(currentTheme.name)")
+        print("----------------------------------")
+
+        // Pass all necessary config data to the cell
+        cell.configure(with: app, 
+                       theme: currentTheme, 
+                       useMonochrome: self.useMonochromeIcons, 
+                       useMinimalistStyle: self.useMinimalistStyle, 
+                       fontName: self.fontName, 
+                       fontSizeMultiplier: self.textSizeMultiplier,
+                       isDarkMode: isDarkMode)
+        
+        // Ensure proper background for Light theme - Handled inside cell.configure now
+        // if ThemeManager.shared.currentTheme.name == "Light" {
+        //    cell.backgroundColor = .white
+        //    cell.contentView.backgroundColor = .white
+        // }
         
         return cell
     }
@@ -1078,7 +1132,6 @@ class AppCell: UITableViewCell {
     
     private let nameLabel = UILabel()
     private let colorIndicator = UIView()
-    private var useMonochromeIcons = false
     
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -1089,24 +1142,27 @@ class AppCell: UITableViewCell {
         fatalError("init(coder:) has not been implemented")
     }
     
-    private func setupCell() {
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        // Reset visual elements to avoid flicker during reuse
+        print("--- DEBUG: AppCell.prepareForReuse (cell: \(self)) ---")
+        nameLabel.text = nil
+        // colorIndicator.backgroundColor = .clear // Commenting out again - should be safe now
+        contentView.backgroundColor = .clear // Reset background as well
         backgroundColor = .clear
+        nameLabel.textColor = .label // Reset text color
+    }
+    
+    private func setupCell() {
+        // Make cell background clear initially, will be set by configure
+        backgroundColor = .clear
+        contentView.backgroundColor = .clear 
         selectionStyle = .default
         
         // Color indicator
         colorIndicator.translatesAutoresizingMaskIntoConstraints = false
         colorIndicator.layer.cornerRadius = 6
         contentView.addSubview(colorIndicator)
-        
-        // Set background color based on theme
-        let theme = ThemeManager.shared.currentTheme
-        if theme.name == "Light" {
-            contentView.backgroundColor = .white
-            backgroundColor = .white
-        } else {
-            contentView.backgroundColor = theme.backgroundColor
-            backgroundColor = theme.backgroundColor
-        }
         
         // App name label
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -1126,135 +1182,82 @@ class AppCell: UITableViewCell {
         ])
     }
     
-    func configure(with app: AppItem) {
+    // Updated configure method to accept theme and style info
+    func configure(with app: AppItem, 
+                   theme: ColorTheme, 
+                   useMonochrome: Bool, 
+                   useMinimalistStyle: Bool, 
+                   fontName: String, 
+                   fontSizeMultiplier: Float,
+                   isDarkMode: Bool) { // Pass isDarkMode explicitly
+                       
+        // Log entry and passed data
+        print("--- DEBUG: AppCell.configure (app: \(app.name)) ---")
+        print("Passed app color: \(app.color)")
+        print("Passed theme: \(theme.name)")
+
         nameLabel.text = app.name
         
-        // Debug print
-        print("DEBUG: AppCell configuring app: \(app.name) with color: \(app.color)")
+        // Use the color directly from the passed app object
+        let appColor = app.color
+
+        // Calculate font size with multiplier passed as parameter
+        let baseFontSize: CGFloat = 17
+        let actualFontSize = baseFontSize * CGFloat(fontSizeMultiplier)
         
-        // Use predefined colors based on app name for consistency
-        let appColor: UIColor
-        switch app.name {
-        case "Messages": appColor = .systemBlue
-        case "Mail": appColor = .systemIndigo
-        case "Internet": appColor = .systemOrange
-        case "Notes": appColor = .systemYellow
-        case "Calendar": appColor = .systemRed
-        case "Photos": appColor = .systemPurple
-        case "Settings": appColor = .systemGray
-        default:
-            // Fallback to cached or default color
-            if let cachedApp = HomeViewController.appCache[app.name] {
-                appColor = cachedApp.color
-                print("DEBUG: Using cached color for \(app.name): \(appColor)")
-            } else {
-                appColor = app.color
-            }
-        }
-        
-        // Check UserDefaults for settings
-        let useMinimalistStyle = UserDefaults.standard.bool(forKey: "useMinimalistStyle")
-        self.useMonochromeIcons = UserDefaults.standard.bool(forKey: "useMonochromeIcons")
-        let isDarkMode = traitCollection.userInterfaceStyle == .dark
-        let textSizeMultiplier = UserDefaults.standard.float(forKey: "textSizeMultiplier")
-        let fontSizeMultiplier = textSizeMultiplier > 0 ? textSizeMultiplier : 1.0
-        let fontName = UserDefaults.standard.string(forKey: "fontName") ?? "System"
-        
-        // Calculate font size with multiplier
-        let fontSize = CGFloat(17) * CGFloat(fontSizeMultiplier)
-        
-        // Apply icon color based on settings
-        let iconColor = useMonochromeIcons ? (isDarkMode ? UIColor.white : UIColor.black) : appColor
+        // Apply icon color based on parameters
+        let iconColor = useMonochrome ? (isDarkMode ? UIColor.white : UIColor.black) : appColor
         print("DEBUG: Setting colorIndicator color to: \(iconColor)")
+        self.colorIndicator.backgroundColor = iconColor
         
-        // Use a slight animation for color change to avoid flicker
-        UIView.transition(with: colorIndicator, duration: 0.05, options: .transitionCrossDissolve, animations: {
-            self.colorIndicator.backgroundColor = iconColor
-        }, completion: nil)
+        // Force immediate layer update to ensure the color is applied right away
+        self.colorIndicator.layer.displayIfNeeded()
         
-        // Get the current theme and explicitly apply colors
-        let theme = ThemeManager.shared.currentTheme
-        
-        // Force white background for Light and Monochrome themes
+        // Apply theme colors passed as parameters
+        // Force white background for Light and Monochrome themes explicitly
         if theme.name == "Light" || theme.name == "Monochrome" {
             contentView.backgroundColor = .white
             backgroundColor = .white
             // Explicitly set text color for Monochrome theme
             if theme.name == "Monochrome" {
                 nameLabel.textColor = .black
+            } else {
+                 // For Light theme, use the theme's text color
+                 nameLabel.textColor = theme.textColor
             }
         } else {
             contentView.backgroundColor = theme.backgroundColor
             backgroundColor = theme.backgroundColor
+            // Apply theme text color for other themes (including dark ones)
+            nameLabel.textColor = theme.textColor 
         }
         
-        // Force white text in dark themes
-        if theme.name == "Dark" || theme.name == "Midnight" || 
-           (theme.name == "Auto Light and Dark" && traitCollection.userInterfaceStyle == .dark) {
-            nameLabel.textColor = .white
-        } else if theme.name == "Monochrome" {
-            nameLabel.textColor = .black
-        } else {
-            nameLabel.textColor = theme.textColor
-        }
-        
-        // Apply style based on settings
+        // Apply style based on parameters
         if useMinimalistStyle {
             if fontName == "System" {
-                nameLabel.font = UIFont.systemFont(ofSize: fontSize, weight: .light)
+                nameLabel.font = UIFont.systemFont(ofSize: actualFontSize, weight: .light)
             } else {
-                nameLabel.font = UIFont(name: fontName, size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .light)
+                nameLabel.font = UIFont(name: fontName, size: actualFontSize) ?? UIFont.systemFont(ofSize: actualFontSize, weight: .light)
             }
             selectionStyle = .none
         } else {
             if fontName == "System" {
-                nameLabel.font = UIFont.systemFont(ofSize: fontSize, weight: .regular)
+                nameLabel.font = UIFont.systemFont(ofSize: actualFontSize, weight: .regular)
             } else {
-                nameLabel.font = UIFont(name: fontName, size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .regular)
+                nameLabel.font = UIFont(name: fontName, size: actualFontSize) ?? UIFont.systemFont(ofSize: actualFontSize, weight: .regular)
             }
             selectionStyle = .default
         }
         
         // Final check for Monochrome theme - ensure text is black
+        // This might be redundant now but kept for safety
         if theme.name == "Monochrome" {
             nameLabel.textColor = .black
-            print("AppCell: Force black text for Monochrome theme for app: \(app.name)")
-        }
-    }
-    
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        
-        // Get the app from the nameLabel text if possible
-        if let name = nameLabel.text, let app = HomeViewController.appCache[name] {
-            configure(with: app)
-        }
-        
-        // Update colors based on current theme
-        let theme = ThemeManager.shared.currentTheme
-        
-        // Force white background for Light theme
-        if theme.name == "Light" {
-            contentView.backgroundColor = .white
-            backgroundColor = .white
-            print("AppCell: Light theme applied in trait change")
-        } else {
-            contentView.backgroundColor = theme.backgroundColor
-            backgroundColor = theme.backgroundColor
-        }
-        
-        // Force white text in dark themes
-        if theme.name == "Dark" || theme.name == "Midnight" || 
-           (theme.name == "Auto Light and Dark" && traitCollection.userInterfaceStyle == .dark) {
-            nameLabel.textColor = .white
-        } else if theme.name == "Monochrome" {
-            nameLabel.textColor = .black
-            // Special handling for monochrome icon colors
-            if !useMonochromeIcons {
-                colorIndicator.backgroundColor = .darkGray
-            }
-        } else {
-            nameLabel.textColor = theme.textColor
+            print("AppCell: Final check force black text for Monochrome theme for app: \(app.name)")
+            // Special handling for monochrome icon colors if needed
+             if !useMonochrome {
+                 colorIndicator.backgroundColor = .darkGray
+             }
         }
     }
 }
